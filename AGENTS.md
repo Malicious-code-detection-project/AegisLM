@@ -13,8 +13,10 @@ Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장
 | 알고 싶은 것 | 정본 위치 |
 | --- | --- |
 | 프로젝트 정체성, 현재 단계, 전체 로드맵 | `README.md` |
-| 파인튜닝 학습 로드맵과 실험 전략 | `FINETUNING_EXPERIMENT_PLAN.md` |
-| 팀 기여 절차, 브랜치, 커밋, 검증 규칙 | `CONTRIBUTING.md` |
+| 세부 문서 인덱스와 문서 관리 규칙 | `docs/README.md` |
+| 파인튜닝 학습 로드맵과 실험 전략 | `docs/FINETUNING_EXPERIMENT_PLAN.md` |
+| Phase C 테스트 기준과 평가 레퍼런스 | `docs/TEST_CRITERIA.md` |
+| 팀 기여 절차, 브랜치, 커밋, 검증 규칙 | `docs/CONTRIBUTING.md` |
 | 에이전트/개발자 공통 운영 규칙 | `AGENTS.md` |
 | Python 패키지 설정 | `pyproject.toml` |
 | 테스트 | `tests/` |
@@ -48,12 +50,13 @@ Phase F: dataset 확장 + adapter 개선
 Phase G: 직접 모델/레이어 연구
 ```
 
-현재 Phase B의 우선순위는 다음과 같다.
+현재 Phase C의 우선순위는 다음과 같다.
 
-- 데이터, 평가, 학습, 추론의 최소 scaffold 설계
-- 코드 패키지, scripts, configs, tests, experiments 디렉터리 생성
-- raw dataset, checkpoint, adapter artifact가 Git에 들어가지 않도록 안전장치 정리
-- 실제 학습 방식 선택은 Phase B 이후로 보류
+- JSON output contract 정의
+- tiny dataset record shape 정의
+- schema validation 테스트 추가
+- invalid JSON, missing field, invalid enum, unsafe guidance 실패 fixture 준비
+- 대형 데이터셋, 실제 악성 샘플, GPU 학습은 Phase C 이후로 보류
 
 ---
 
@@ -219,13 +222,24 @@ PR 본문에는 다음을 포함한다.
 ## 9. 거버넌스
 
 - `README.md`는 프로젝트 정체성, 현재 단계, 전체 로드맵의 정본이다.
-- `FINETUNING_EXPERIMENT_PLAN.md`는 학습 로드맵, 실험 전략, dataset/evaluation 기준의 정본이다.
+- `docs/README.md`는 세부 문서 인덱스와 문서 관리 규칙의 정본이다.
+- `docs/FINETUNING_EXPERIMENT_PLAN.md`는 학습 로드맵, 실험 전략, dataset/evaluation 기준의 정본이다.
+- `docs/TEST_CRITERIA.md`는 Phase C 테스트 기준과 평가 레퍼런스의 정본이다.
 - `AGENTS.md`는 작업 규칙과 에이전트 행동 기준의 정본이다.
-- `CONTRIBUTING.md`는 팀원이 PR을 올리기 위한 절차 문서다.
+- `docs/CONTRIBUTING.md`는 팀원이 PR을 올리기 위한 절차 문서다.
+- `CONTRIBUTING.md`는 GitHub 관례를 위한 안내 링크 문서다.
 - GitHub Issue는 작업 단위와 상태 추적의 정본이다.
 - PR은 코드 리뷰와 변경 이력의 정본이다.
 
 schema, dataset format, prompt contract, evaluation metric, artifact storage policy 변경은 반드시 문서와 테스트를 함께 갱신한다.
+
+문서 추가/수정 규칙:
+
+- README에는 프로젝트의 큰 방향과 현재 상태만 적는다.
+- 세부 기준, 실험 계획, 기여 규칙, 테스트 기준은 `docs/` 아래 문서에 기록한다.
+- 새 기준이 생기면 가장 가까운 기존 문서에 추가한다.
+- 성격이 독립적인 기준이면 `docs/`에 새 문서를 만든다.
+- 문서를 추가하거나 이동하면 `README.md`, `docs/README.md`, `AGENTS.md`의 링크와 작업 규칙을 함께 갱신한다.
 
 모호하거나 막히면 임의로 확장하지 말고 GitHub Issue 또는 PR 코멘트에 남긴 뒤 Owner 확인을 받는다.
 
