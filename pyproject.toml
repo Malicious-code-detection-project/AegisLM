@@ -1,0 +1,8 @@
+[project]
+name = "aegislm"
+version = "0.1.0"
+description = "LLM fine-tuning and model development project for security analysis research"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+keywords = ["llm", "fine-tuning", "security", "malware-analysis", "model-development"]

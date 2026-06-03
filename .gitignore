@@ -1,0 +1,37 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local datasets and model artifacts
+data/
+raw_datasets/
+artifacts/
+checkpoints/
+adapters/
+models/
+outputs/
+runs/
+wandb/
+mlruns/
+
+# Experiment outputs stay local unless explicitly curated.
+experiments/*
+!experiments/.gitkeep
+
+# OS/editor files
+.DS_Store
