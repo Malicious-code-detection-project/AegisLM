@@ -31,16 +31,16 @@ v0 단계에서는 악성코드 유사 스크립트 동작 설명, 취약점 맥
 
 **Phase A: 문서/저장소 정체성 정리 (완료)**
 
-이 프로젝트는 Project Nurilab : 로컬 LLM 기반 악성코드 분석 자동화 시스템 개발 프로젝트에서 `로컬 LLM 파인 튜닝 또는 LLM 모델링` 부분을 담당하는 프로젝트입니다. `README.md`, `AGENTS.md`, `CONTRIBUTING.md`의 방향성은 이 기준에 맞춰 정리했습니다.
+이 프로젝트는 Project Nurilab : 로컬 LLM 기반 악성코드 분석 자동화 시스템 개발 프로젝트에서 `로컬 LLM 파인 튜닝 또는 LLM 모델링` 부분을 담당하는 프로젝트입니다. `README.md`, `AGENTS.md`, `docs/CONTRIBUTING.md`의 방향성은 이 기준에 맞춰 정리했습니다.
 
 
--> **Phase B: 최소 코드 뼈대 생성 (완료, 최초 push 준비)**
+**Phase B: 최소 코드 뼈대 생성 (완료, 최초 push 준비)**
 
 학습 코드를 바로 크게 만들기보다, 데이터, 평가, 학습, 추론의 책임 경계를 나누는 얇은 scaffold를 만듭니다. 이 단계의 목표는 전체 구조를 이해할 수 있는 최소 패키지와 디렉터리 구조를 만드는 것입니다. 실제 학습 방식, notebook/script/config 중심 선택, TRL/Unsloth 우선순위는 Phase B 이후에 결정합니다.
 
-**Phase C: JSON schema + tiny dataset**
+-> **Phase C: 데이터 전략 + JSON schema + tiny dataset (진행 중)**
 
-모델이 생성해야 할 JSON output contract를 코드와 문서 양쪽에서 고정하고, 5-20개 수준의 작은 synthetic 또는 metadata-only 학습 예시를 준비합니다. 이 단계에서는 대형 데이터셋이나 실제 악성 샘플을 다루지 않습니다.
+데이터 활용 전략을 먼저 정리한 뒤 모델이 생성해야 할 JSON output contract를 코드와 문서 양쪽에서 고정하고, 5-20개 수준의 작은 synthetic 또는 metadata-only 학습 예시를 준비합니다. 이 단계에서는 대형 데이터셋, 실제 악성 샘플, GPU 학습, RAG embedding index 생성을 다루지 않습니다.
 
 **Phase D: baseline inference + evaluation**
 
@@ -79,6 +79,11 @@ Project NuriLab은 나중에 AegisLM에서 만든 모델, LoRA adapter, 평가 �
 
 ## 문서
 
-- `FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획
 - `AGENTS.md` - 협업 운영 규칙
-- `CONTRIBUTING.md` - 기여 절차
+- `CONTRIBUTING.md` - 기여 절차 안내
+- `docs/README.md` - 세부 문서 인덱스와 문서 관리 규칙
+- `docs/DATA_STRATEGY.md` - Phase C 데이터 활용 전략
+- `docs/FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획
+- `docs/TEST_CRITERIA.md` - Phase C 테스트 기준과 평가 레퍼런스
+
+README에는 프로젝트의 큰 방향과 현재 상태만 유지합니다. 세부 기준, 실험 계획, 기여 규칙, 테스트 기준은 `docs/` 아래 문서에 기록합니다.

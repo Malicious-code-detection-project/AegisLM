@@ -194,6 +194,10 @@ steps.
 
 ## 6. Dataset Plan
 
+Detailed source usage, preprocessing, tokenization/chunking, split, and
+fine-tuning/evaluation/RAG separation rules are maintained in
+`DATA_STRATEGY.md`. This section defines the high-level dataset direction only.
+
 Datasets will be installed and stored on the NVIDIA GPU machine or approved GPU
 server storage, not in this Git repository.
 

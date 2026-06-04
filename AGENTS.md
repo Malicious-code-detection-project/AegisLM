@@ -14,6 +14,7 @@ Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장
 | --- | --- |
 | 프로젝트 정체성, 현재 단계, 전체 로드맵 | `README.md` |
 | 세부 문서 인덱스와 문서 관리 규칙 | `docs/README.md` |
+| Phase C 데이터 활용 전략 | `docs/DATA_STRATEGY.md` |
 | 파인튜닝 학습 로드맵과 실험 전략 | `docs/FINETUNING_EXPERIMENT_PLAN.md` |
 | Phase C 테스트 기준과 평가 레퍼런스 | `docs/TEST_CRITERIA.md` |
 | 팀 기여 절차, 브랜치, 커밋, 검증 규칙 | `docs/CONTRIBUTING.md` |
@@ -43,7 +44,7 @@ git status
 ```text
 Phase A: 문서/저장소 정체성 정리
 Phase B: 최소 코드 뼈대 생성
-Phase C: JSON schema + tiny dataset
+Phase C: 데이터 전략 + JSON schema + tiny dataset
 Phase D: baseline inference + evaluation
 Phase E: tiny SFT PoC
 Phase F: dataset 확장 + adapter 개선
@@ -52,10 +53,12 @@ Phase G: 직접 모델/레이어 연구
 
 현재 Phase C의 우선순위는 다음과 같다.
 
-- JSON output contract 정의
-- tiny dataset record shape 정의
-- schema validation 테스트 추가
-- invalid JSON, missing field, invalid enum, unsafe guidance 실패 fixture 준비
+- 데이터 소스별 사용 목적 정의
+- 데이터 안전/제외 기준 정의
+- fine-tuning, evaluation, RAG/vector 데이터 흐름 분리
+- sample unit, record shape, preprocessing, tokenization, chunking 기준 정의
+- tiny dataset acceptance criteria 정의
+- 데이터 전략 이후 JSON output contract와 validation test 정의
 - 대형 데이터셋, 실제 악성 샘플, GPU 학습은 Phase C 이후로 보류
 
 ---
@@ -67,6 +70,7 @@ Phase G: 직접 모델/레이어 연구
 ```text
 문서/정체성 정리
 -> 저장소 scaffold 설계
+-> 데이터 활용 전략 정의
 -> schema와 prompt contract 정의
 -> tiny dataset 준비
 -> baseline inference 확인
@@ -86,6 +90,7 @@ Phase G: 직접 모델/레이어 연구
 의존성이 있는 작업은 상위 작업을 먼저 끝낸다.
 
 - 학습 스크립트 전: schema와 tiny dataset 확인
+- schema 작성 전: 데이터 활용 전략 확인
 - adapter 학습 전: baseline inference와 evaluation 확인
 - dataset 확장 전: 안전/저장 정책 확인
 - 모델 구조 연구 전: LoRA / QLoRA 한계와 평가 목표 확인
@@ -223,6 +228,7 @@ PR 본문에는 다음을 포함한다.
 
 - `README.md`는 프로젝트 정체성, 현재 단계, 전체 로드맵의 정본이다.
 - `docs/README.md`는 세부 문서 인덱스와 문서 관리 규칙의 정본이다.
+- `docs/DATA_STRATEGY.md`는 Phase C 데이터 활용, 전처리, tokenization/chunking, split, RAG/vector 분리 기준의 정본이다.
 - `docs/FINETUNING_EXPERIMENT_PLAN.md`는 학습 로드맵, 실험 전략, dataset/evaluation 기준의 정본이다.
 - `docs/TEST_CRITERIA.md`는 Phase C 테스트 기준과 평가 레퍼런스의 정본이다.
 - `AGENTS.md`는 작업 규칙과 에이전트 행동 기준의 정본이다.

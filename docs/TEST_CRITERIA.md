@@ -2,10 +2,11 @@
 
 이 문서는 `AegisLM` Phase C부터 적용할 테스트 기준과 참고 레퍼런스를 기록합니다.
 
-Phase C의 목표는 파인튜닝을 바로 시작하는 것이 아니라, 모델 출력 계약과 평가 기준을 먼저 고정하는 것입니다. 이후 dataset, prompt, inference, training, evaluation 코드는 이 기준을 따라야 합니다.
+Phase C의 목표는 파인튜닝을 바로 시작하는 것이 아니라, 데이터 전략을 먼저 정리한 뒤 모델 출력 계약과 평가 기준을 고정하는 것입니다. 이후 dataset, prompt, inference, training, evaluation 코드는 이 기준을 따라야 합니다.
 
 ## 1. Phase C 목표
 
+- 데이터 활용 전략을 기준으로 fine-tuning, evaluation, RAG/vector 데이터 흐름을 분리한다.
 - 모델이 생성해야 하는 JSON output contract를 명확히 정의한다.
 - tiny dataset의 record shape와 expected output 형식을 고정한다.
 - 올바른 예시는 통과하고, 잘못된 예시는 실패하는 validation test를 만든다.
