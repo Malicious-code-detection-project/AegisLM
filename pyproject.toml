@@ -4,5 +4,12 @@ version = "0.1.0"
 description = "LLM fine-tuning and model development project for security analysis research"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "jsonschema>=4,<5",
+]
 keywords = ["llm", "fine-tuning", "security", "malware-analysis", "model-development"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.16",
+]

@@ -8,8 +8,10 @@ class ImportSmokeTest(unittest.TestCase):
             "aegislm",
             "aegislm.datasets",
             "aegislm.evaluation",
+            "aegislm.evaluation.validation",
             "aegislm.inference",
             "aegislm.prompts",
+            "aegislm.schemas",
             "aegislm.training",
         ]
 
