@@ -90,3 +90,14 @@ OpenAI API fine-tuning 문서는 API 사용 목적이 아니라 instruction/inpu
 - invalid JSON, missing field, invalid enum, unsafe guidance fixture가 실패한다.
 - 테스트 명령으로 schema validation 결과를 확인할 수 있다.
 - README와 docs 문서가 현재 Phase C 상태를 가리킨다.
+
+## 6. Phase C 초기 구현 기준
+
+초기 구현은 `jsonschema` 기반 검증을 사용한다.
+
+- JSON output contract와 dataset record schema는 `aegislm/schemas.py`에 둔다.
+- 검증 API는 `aegislm/evaluation/validation.py`에 둔다.
+- 첫 tiny fixture는 `tests/fixtures/tiny_phase_c_records.jsonl`에 JSONL 형식으로 둔다.
+- raw CVE, KEV, ATT&CK 데이터는 `data/` 아래에만 보관하고 Git에 커밋하지 않는다.
+- fixture는 metadata-only 또는 synthetic record만 포함하며 executable payload를 포함하지 않는다.
+- ATT&CK mapping 근거가 부족한 fixture는 `attack_mapping: []`와 `limitations`를 함께 둔다.

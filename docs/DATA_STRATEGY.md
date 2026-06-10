@@ -312,3 +312,25 @@ Phase C에서 하지 않는 일:
 - VirusTotal quota documentation: https://docs.virustotal.com/docs/consumption-quotas-handled
 - MalwareBazaar API: https://bazaar.abuse.ch/api/
 - Hugging Face Dataset Cards: https://huggingface.co/docs/hub/datasets-cards
+
+## 16. Initial Tiny Fixture Implementation
+
+Phase C의 첫 tiny fixture는 성능 학습 목적이 아니라 schema와 validation 흐름 검증 목적이다.
+
+초기 fixture 기본값:
+
+- format: JSONL
+- location: `tests/fixtures/tiny_phase_c_records.jsonl`
+- size: 5 records
+- source mix: CVE metadata, CISA KEV metadata, MITRE ATT&CK mapping reference, synthetic safe static-analysis metadata
+- split: `fixture`
+- safety: `metadata_only` 또는 `synthetic`
+- executable payload: always `false`
+
+첫 fixture 세트는 다음 케이스를 포함한다.
+
+- KEV critical deserialization case
+- KEV ransomware-known metadata case
+- non-KEV high-CVSS case
+- KEV ambiguous mapping case with empty `attack_mapping`
+- synthetic low-risk static-analysis metadata case
