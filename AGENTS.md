@@ -51,15 +51,15 @@ Phase F: dataset 확장 + adapter 개선
 Phase G: 직접 모델/레이어 연구
 ```
 
-현재 Phase C의 우선순위는 다음과 같다.
+현재 Phase D의 우선순위는 다음과 같다.
 
-- 데이터 소스별 사용 목적 정의
-- 데이터 안전/제외 기준 정의
-- fine-tuning, evaluation, RAG/vector 데이터 흐름 분리
-- sample unit, record shape, preprocessing, tokenization, chunking 기준 정의
-- tiny dataset acceptance criteria 정의
-- 데이터 전략 이후 JSON output contract와 validation test 정의
-- 대형 데이터셋, 실제 악성 샘플, GPU 학습은 Phase C 이후로 보류
+- Phase C tiny fixture와 JSON output contract를 baseline prompt/evaluation 입력으로 사용
+- `openai/gpt-oss-20b` 기본 모델 inference 경로 확인
+- JSON parse success, required field completeness, invalid enum, unsafe guidance 평가 기준선 확인
+- hallucinated ATT&CK mapping과 근거 부족 mapping 처리 기준 확인
+- baseline 결과를 adapter 학습 전 비교 기준으로 기록
+- 모델, checkpoint, adapter, raw dataset은 계속 Git 밖에 보관
+- tiny SFT PoC와 GPU 학습은 baseline inference와 evaluation 기준선 확인 이후 진행
 
 ---
 
