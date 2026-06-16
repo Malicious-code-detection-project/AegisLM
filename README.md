@@ -21,6 +21,10 @@ LLM 모델 개발은 분석 파이프라인 구현과 다른 속도로 움직입
 
 ## 현재 초점
 
+현재 저장소 단계는 **Phase D: baseline inference + evaluation** 시작입니다.
+
+Phase C에서는 데이터 전략, JSON output contract, tiny fixture, schema validation test를 완료했습니다. 이제 파인튜닝을 시작하기 전에 baseline inference와 evaluation 기준선을 먼저 확인합니다.
+
 초기 기준 모델은 `openai/gpt-oss-20b`입니다.
 
 v0 단계에서는 악성코드 유사 스크립트 동작 설명, 취약점 맥락 요약, CTI 메타데이터 정리, ATT&CK 매핑, 위험도 우선순위화를 JSON 형식으로 생성하는 모델을 목표로 합니다.
@@ -38,11 +42,11 @@ v0 단계에서는 악성코드 유사 스크립트 동작 설명, 취약점 맥
 
 학습 코드를 바로 크게 만들기보다, 데이터, 평가, 학습, 추론의 책임 경계를 나누는 얇은 scaffold를 만듭니다. 이 단계의 목표는 전체 구조를 이해할 수 있는 최소 패키지와 디렉터리 구조를 만드는 것입니다. 실제 학습 방식, notebook/script/config 중심 선택, TRL/Unsloth 우선순위는 Phase B 이후에 결정합니다.
 
--> **Phase C: 데이터 전략 + JSON schema + tiny dataset (진행 중)**
+**Phase C: 데이터 전략 + JSON schema + tiny dataset (완료)**
 
 데이터 활용 전략을 먼저 정리한 뒤 모델이 생성해야 할 JSON output contract를 코드와 문서 양쪽에서 고정하고, 5-20개 수준의 작은 synthetic 또는 metadata-only 학습 예시를 준비합니다. 이 단계에서는 대형 데이터셋, 실제 악성 샘플, GPU 학습, RAG embedding index 생성을 다루지 않습니다.
 
-**Phase D: baseline inference + evaluation**
+-> **Phase D: baseline inference + evaluation (진행 중)**
 
 파인튜닝 전에 `openai/gpt-oss-20b` 기본 모델의 출력을 먼저 확인하고, JSON parse success, required field completeness, hallucinated ATT&CK mapping, unsafe guidance 여부를 평가합니다. 학습 전 baseline이 있어야 이후 adapter가 실제로 좋아졌는지 판단할 수 있습니다.
 

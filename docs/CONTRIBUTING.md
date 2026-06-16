@@ -12,7 +12,7 @@
 
 이 저장소는 보안 분석 시스템 자체를 구현하지 않습니다. 로컬 LLM 파인튜닝, 보안 분석 특화 데이터셋 구성, JSON 구조화 출력 학습, evaluation harness, adapter 개선, 장기적인 모델 구조 연구를 담당합니다.
 
-현재 단계는 README의 **Phase C: 데이터 전략 + JSON schema + tiny dataset**입니다. 이 단계에서는 JSON schema 구현보다 데이터 활용 전략을 먼저 정리합니다.
+현재 단계는 README의 **Phase D: baseline inference + evaluation**입니다. Phase C의 데이터 전략, JSON schema, tiny fixture, validation baseline은 완료되었고, 파인튜닝 전 baseline inference와 evaluation 기준선을 먼저 확인합니다.
 
 ---
 
@@ -40,7 +40,7 @@ git status
 
 ## 워크스페이스 구조
 
-현재 기본 구조는 다음과 같습니다. Phase C에서는 이 구조 위에 데이터 전략을 먼저 정리한 뒤 JSON schema, tiny dataset fixture, validation test를 추가합니다.
+현재 기본 구조는 다음과 같습니다. Phase C 산출물인 데이터 전략, JSON schema, tiny dataset fixture, validation test는 이 구조 위에 추가되어 있습니다. Phase D에서는 baseline inference와 evaluation helper를 이 책임 경계 안에서 확장합니다.
 
 ```text
 AegisLM/
@@ -61,7 +61,7 @@ AegisLM/
 │   ├── evaluation/                   # JSON validity and safety checks
 │   ├── inference/                    # base/adaptor inference helpers
 │   ├── training/                     # TRL / Unsloth helper code
-│   └── schemas.py                    # Phase C에서 추가할 JSON output contract
+│   └── schemas.py                    # Phase C JSON output contract
 ├── scripts/                          # future command entrypoints
 ├── configs/                          # future experiment configs
 ├── tests/
@@ -81,7 +81,7 @@ AegisLM/
 uv sync
 ```
 
-현재 Phase C에서는 데이터 전략 문서화가 우선입니다. 코드가 추가된 뒤에는 가능한 범위에서 다음 명령을 사용합니다.
+현재 Phase D에서는 baseline inference와 evaluation 기준선 확인이 우선입니다. 코드가 추가되거나 문서 기준이 바뀐 뒤에는 가능한 범위에서 다음 명령을 사용합니다.
 
 ```bash
 uv run python -m unittest discover -s tests
@@ -145,10 +145,10 @@ Conventional Commits 형식을 권장합니다.
 
 현재 로드맵에서 우선하는 작업:
 
-- Phase A 문서/저장소 정체성 정리
-- Phase B 최소 scaffold 생성
-- Phase C 데이터 전략, JSON schema, tiny dataset 준비
-- Phase D baseline inference와 evaluation 기준 준비
+- Phase A 문서/저장소 정체성 정리 (완료)
+- Phase B 최소 scaffold 생성 (완료)
+- Phase C 데이터 전략, JSON schema, tiny dataset 준비 (완료)
+- Phase D baseline inference와 evaluation 기준 준비 (현재)
 - Phase E tiny SFT PoC
 - Phase F dataset 확장과 adapter 개선
 - Phase G 직접 모델/레이어 연구
