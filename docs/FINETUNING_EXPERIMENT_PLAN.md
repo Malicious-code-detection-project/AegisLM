@@ -332,15 +332,26 @@ Record for each PoC:
 
 ## 10. Evaluation
 
+Phase D/E evaluation follows `docs/EVALUATION_PLAN.md`. The baseline run is
+recorded as the before state; adapter runs are compared against the same
+held-out fixture set.
+
 Primary v0 evaluation metrics:
 
 - JSON parse success rate
+- JSON Schema validation pass rate
 - required field completeness
 - behavior explanation usefulness
-- ATT&CK tactic / technique mapping quality
-- severity consistency
+- ATT&CK technique precision, recall, and F1
+- risk_level consistency
 - hallucinated TTP rate
 - unsafe or overly actionable malware guidance rate
+- composite score, 0-100
+
+Evaluation artifacts:
+
+- `evaluation_summary.json` for machine-readable comparison
+- `evaluation_report.html` for human review
 
 Evaluation candidates:
 

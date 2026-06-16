@@ -108,7 +108,12 @@ DATASET_RECORD_SCHEMA: dict[str, object] = {
         "metadata": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["split", "safety_level", "contains_executable_payload", "notes"],
+            "required": [
+                "split",
+                "safety_level",
+                "contains_executable_payload",
+                "notes",
+            ],
             "properties": {
                 "split": {"type": "string", "enum": list(SPLITS)},
                 "safety_level": {"type": "string", "enum": list(SAFETY_LEVELS)},
