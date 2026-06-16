@@ -86,6 +86,7 @@ Project NuriLab은 나중에 AegisLM에서 만든 모델, LoRA adapter, 평가 �
 - `AGENTS.md` - 협업 운영 규칙
 - `CONTRIBUTING.md` - 기여 절차 안내
 - `docs/README.md` - 세부 문서 인덱스와 문서 관리 규칙
+- `docs/DATASET_CANDIDATES.md` - 공개 데이터셋 후보 registry와 안전성/용도 분류
 - `docs/DATA_STRATEGY.md` - Phase C 데이터 활용 전략
 - `docs/EVALUATION_PLAN.md` - Phase D/E 평가 계획과 결과 리포트 기준
 - `docs/FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획

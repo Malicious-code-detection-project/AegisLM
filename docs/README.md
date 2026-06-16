@@ -9,6 +9,7 @@
 | 문서 | 역할 |
 | --- | --- |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 팀원이 작업을 시작하고 PR을 제출하기 위한 실행 가이드 |
+| [DATASET_CANDIDATES.md](DATASET_CANDIDATES.md) | Phase D/E 이후 공개 데이터셋 후보 registry와 안전성/용도 분류 |
 | [DATA_STRATEGY.md](DATA_STRATEGY.md) | Phase C 데이터 활용 전략, 전처리, tokenization/chunking, split, RAG/vector 분리 기준 |
 | [EVALUATION_PLAN.md](EVALUATION_PLAN.md) | Phase D/E 평가 계획, 점수화 기준, JSON/HTML 리포트 형식 |
 | [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md) | 파인튜닝 학습 로드맵, 실험 전략, 데이터셋 계획 |

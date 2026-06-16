@@ -14,6 +14,7 @@ Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장
 | --- | --- |
 | 프로젝트 정체성, 현재 단계, 전체 로드맵 | `README.md` |
 | 세부 문서 인덱스와 문서 관리 규칙 | `docs/README.md` |
+| 공개 데이터셋 후보 registry와 안전성/용도 분류 | `docs/DATASET_CANDIDATES.md` |
 | Phase C 데이터 활용 전략 | `docs/DATA_STRATEGY.md` |
 | Phase D/E 평가 계획과 리포트 기준 | `docs/EVALUATION_PLAN.md` |
 | 파인튜닝 학습 로드맵과 실험 전략 | `docs/FINETUNING_EXPERIMENT_PLAN.md` |

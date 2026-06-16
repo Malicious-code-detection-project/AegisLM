@@ -60,6 +60,8 @@ AegisLM은 데이터를 세 가지 경로로 나눠 관리합니다.
 
 ## 4. Candidate Data Sources
 
+공개 데이터셋 후보의 조사 상태, license/terms, raw malware 포함 가능성, Phase D/E 적용 여부는 [DATASET_CANDIDATES.md](DATASET_CANDIDATES.md)에 기록합니다. 이 섹션은 데이터 소스의 원칙적인 사용 방향만 유지합니다.
+
 | Source | Primary use | Allowed in Git | Notes |
 | --- | --- | --- | --- |
 | NVD / CVE metadata | fine-tuning, evaluation, prompt examples | small curated fixtures only | CVE description, CVSS, CWE, affected products, references를 정규화 후보로 둔다. |
