@@ -18,6 +18,7 @@ Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장
 | 파인튜닝 학습 로드맵과 실험 전략 | `docs/FINETUNING_EXPERIMENT_PLAN.md` |
 | Phase C 테스트 기준과 평가 레퍼런스 | `docs/TEST_CRITERIA.md` |
 | 팀 기여 절차, 브랜치, 커밋, 검증 규칙 | `docs/CONTRIBUTING.md` |
+| PR 본문 작성 템플릿 | `docs/PR_DESCRIPTION_TEMPLATE.md` |
 | 에이전트/개발자 공통 운영 규칙 | `AGENTS.md` |
 | Python 패키지 설정 | `pyproject.toml` |
 | 테스트 | `tests/` |
@@ -214,13 +215,13 @@ PR 생성 전:
 - [ ] raw dataset, checkpoint, adapter artifact, secrets, 민감 데이터가 포함되지 않았는가?
 - [ ] 실험 결과를 주장한다면 command, package version, GPU, dataset path를 기록했는가?
 
-PR 본문에는 다음을 포함한다.
+PR 본문은 `docs/PR_DESCRIPTION_TEMPLATE.md`를 기준으로 작성한다. 최소한 다음을 포함한다.
 
 - 변경 목적
 - 주요 변경 내용
 - 검증 명령과 결과
 - 제한사항 또는 후속 작업
-- 관련 GitHub Issue
+- 관련 Linear 이슈와 GitHub PR/Issue
 
 ---
 
@@ -230,6 +231,7 @@ PR 본문에는 다음을 포함한다.
 - `docs/README.md`는 세부 문서 인덱스와 문서 관리 규칙의 정본이다.
 - `docs/DATA_STRATEGY.md`는 Phase C 데이터 활용, 전처리, tokenization/chunking, split, RAG/vector 분리 기준의 정본이다.
 - `docs/FINETUNING_EXPERIMENT_PLAN.md`는 학습 로드맵, 실험 전략, dataset/evaluation 기준의 정본이다.
+- `docs/PR_DESCRIPTION_TEMPLATE.md`는 PR 본문 작성 형식과 체크리스트의 정본이다.
 - `docs/TEST_CRITERIA.md`는 Phase C 테스트 기준과 평가 레퍼런스의 정본이다.
 - `AGENTS.md`는 작업 규칙과 에이전트 행동 기준의 정본이다.
 - `docs/CONTRIBUTING.md`는 팀원이 PR을 올리기 위한 절차 문서다.

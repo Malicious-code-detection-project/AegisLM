@@ -208,13 +208,13 @@ PR 제목:
 [AegisLM] <summary>
 ```
 
-PR 본문에는 다음을 포함합니다.
+PR 본문은 [PR_DESCRIPTION_TEMPLATE.md](PR_DESCRIPTION_TEMPLATE.md)를 기준으로 작성합니다. 최소한 다음을 포함합니다.
 
 - 변경 목적
 - 주요 변경 내용
 - 검증 명령과 결과
 - 제한사항 또는 후속 작업
-- 관련 GitHub Issue
+- 관련 Linear 이슈와 GitHub PR/Issue
 
 PR 생성 전 체크리스트:
 
