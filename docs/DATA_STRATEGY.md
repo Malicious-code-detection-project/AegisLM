@@ -121,6 +121,8 @@ AegisLM의 데이터 전략은 원본 구조를 외우는 것이 아니라, 각 
 - model checkpoint
 - adapter artifact
 
+Model adapter, checkpoint, model card, and evaluation artifact storage rules are maintained in [ARTIFACT_STORAGE_POLICY.md](ARTIFACT_STORAGE_POLICY.md).
+
 다음 내용은 fine-tuning target output에 포함하지 않습니다.
 
 - 공격 실행 절차

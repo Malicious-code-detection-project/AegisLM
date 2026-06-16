@@ -116,7 +116,8 @@ Goal: learn the full training loop with minimal risk.
 - Prepare a tiny JSONL dataset from metadata-only or synthetic examples.
 - Run one Unsloth QLoRA PoC.
 - Run one Hugging Face TRL LoRA / QLoRA PoC if compatibility allows it.
-- Save adapter outputs outside the Git repository.
+- Save adapter outputs outside the Git repository according to
+  `docs/ARTIFACT_STORAGE_POLICY.md`.
 - Compare JSON validity, output quality, VRAM usage, training time, and
   inference latency.
 
@@ -365,6 +366,9 @@ Do not treat LLM output as final ground truth. Evaluation should compare model
 output against curated labels, deterministic analyzer signals, and human review.
 
 ## 11. Safety and Storage Rules
+
+Detailed adapter, checkpoint, model card, and evaluation artifact storage
+rules are maintained in `docs/ARTIFACT_STORAGE_POLICY.md`.
 
 - Do not commit real malware samples.
 - Do not commit downloaded datasets.
