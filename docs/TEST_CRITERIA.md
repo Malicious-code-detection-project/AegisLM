@@ -41,6 +41,18 @@ Phase D 이후 baseline/adaptor 비교에서 사용할 후보 지표:
 
 정량 지표만으로 충분하지 않은 항목은 human review note를 함께 기록합니다.
 
+### Phase D/E 점수 표현
+
+파인튜닝 전후 비교는 `docs/EVALUATION_PLAN.md`의 기준을 따른다.
+
+- hard gate: JSON parse, JSON Schema validation, unsafe guidance 여부
+- composite score: 0-100
+- result artifacts: `evaluation_summary.json`, `evaluation_report.html`
+- baseline: 실패도 기록하는 before 기준선
+- adapter: held-out fixture에서 hard gate 통과율과 baseline 대비 개선 여부 확인
+
+Composite score는 JSON contract adherence, safety, risk consistency, ATT&CK mapping, evidence discipline으로 나눠 기록한다. 단일 점수만으로 모델 품질을 단정하지 않고 세부 지표와 human review note를 함께 본다.
+
 ## 4. 레퍼런스
 
 ### 출력 구조와 JSON Schema

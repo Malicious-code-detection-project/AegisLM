@@ -8,6 +8,7 @@ class ImportSmokeTest(unittest.TestCase):
             "aegislm",
             "aegislm.datasets",
             "aegislm.evaluation",
+            "aegislm.evaluation.harness",
             "aegislm.evaluation.validation",
             "aegislm.inference",
             "aegislm.prompts",
@@ -17,7 +18,9 @@ class ImportSmokeTest(unittest.TestCase):
 
         for module_name in module_names:
             with self.subTest(module_name=module_name):
-                self.assertEqual(importlib.import_module(module_name).__name__, module_name)
+                self.assertEqual(
+                    importlib.import_module(module_name).__name__, module_name
+                )
 
 
 if __name__ == "__main__":
