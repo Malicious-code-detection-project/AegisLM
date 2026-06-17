@@ -80,9 +80,13 @@ Relates to <THE-YY, optional>
 
 ## 검증 / Validation
 
-- `uv run python -m unittest discover -s tests`
+- `uv run pytest tests/`
   - <결과>
 - `uv run ruff check .`
+  - <결과>
+- `uv run ruff format --check .`
+  - <결과>
+- `uv run mypy aegislm/ tests/`
   - <결과>
 
 추가 검증이 있는 경우:

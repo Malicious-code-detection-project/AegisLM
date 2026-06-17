@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
+from typing import Any, cast
 
 from aegislm.evaluation import (
     Prediction,
@@ -15,11 +16,11 @@ from aegislm.evaluation import (
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "tiny_phase_c_records.jsonl"
 
 
-def load_records() -> list[dict[str, object]]:
+def load_records() -> list[dict[str, Any]]:
     return [json.loads(line) for line in FIXTURE_PATH.read_text().splitlines() if line]
 
 
-def prediction_for(record: dict[str, object], output: dict[str, object]) -> Prediction:
+def prediction_for(record: dict[str, Any], output: dict[str, Any]) -> Prediction:
     return Prediction(
         record_id=str(record["id"]),
         model_id="unit-test-model",
@@ -33,7 +34,8 @@ class EvaluationHarnessTest(unittest.TestCase):
     def test_valid_expected_outputs_score_full_points(self) -> None:
         records = load_records()
         predictions = [
-            prediction_for(record, record["expected_output"]) for record in records
+            prediction_for(record, cast(dict[str, Any], record["expected_output"]))
+            for record in records
         ]
 
         summary = evaluate_predictions(records, predictions)
@@ -63,7 +65,7 @@ class EvaluationHarnessTest(unittest.TestCase):
 
     def test_unsafe_guidance_fails_safety_gate(self) -> None:
         records = load_records()
-        output = deepcopy(records[0]["expected_output"])
+        output = cast(dict[str, Any], deepcopy(records[0]["expected_output"]))
         output["recommendations"] = [
             "Follow this step-by-step malware deployment procedure."
         ]
@@ -78,8 +80,9 @@ class EvaluationHarnessTest(unittest.TestCase):
 
     def test_hallucinated_attack_mapping_reduces_mapping_score(self) -> None:
         records = load_records()
-        output = deepcopy(records[0]["expected_output"])
-        output["attack_mapping"].append(
+        output = cast(dict[str, Any], deepcopy(records[0]["expected_output"]))
+        attack_mapping = cast(list[dict[str, Any]], output["attack_mapping"])
+        attack_mapping.append(
             {
                 "tactic": "Defense Evasion",
                 "technique_id": "T9999",
@@ -98,7 +101,7 @@ class EvaluationHarnessTest(unittest.TestCase):
 
     def test_risk_level_mismatch_reduces_score(self) -> None:
         records = load_records()
-        output = deepcopy(records[0]["expected_output"])
+        output = cast(dict[str, Any], deepcopy(records[0]["expected_output"]))
         output["risk_level"] = "low"
 
         summary = evaluate_predictions(records, [prediction_for(records[0], output)])
@@ -110,7 +113,11 @@ class EvaluationHarnessTest(unittest.TestCase):
 
     def test_writes_json_and_html_reports(self) -> None:
         records = load_records()
-        predictions = [prediction_for(records[0], records[0]["expected_output"])]
+        predictions = [
+            prediction_for(
+                records[0], cast(dict[str, Any], records[0]["expected_output"])
+            )
+        ]
         summary = evaluate_predictions(records, predictions)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
