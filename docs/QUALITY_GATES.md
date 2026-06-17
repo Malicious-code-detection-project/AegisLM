@@ -49,25 +49,3 @@ mypy는 `aegislm/`와 `tests/`를 검사합니다.
 - public helper의 type hint 불일치
 
 strict mode, coverage 증가, third-party typing 정책 강화는 별도 이슈에서 다룹니다.
-
-## 4. apply_patch Status
-
-현재 Codex의 `apply_patch` tool은 이 환경에서 다음 오류로 실패합니다.
-
-```text
-fs sandbox helper failed with status exit status: 1: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
-```
-
-판단:
-
-- patch 내용이나 AegisLM 파일 구조 문제가 아니다.
-- repo 안의 Python 설정, dependency, test 설정으로 해결할 수 있는 문제가 아니다.
-- `bubblewrap` 기반 sandbox가 loopback network namespace를 설정하는 단계에서 권한 문제로 실패한다.
-
-현재 대응:
-
-1. 수동 편집이 필요하면 먼저 `apply_patch`를 시도한다.
-2. 같은 bwrap 오류가 재현되면 승인된 shell에서 대상 파일만 제한적으로 수정한다.
-3. 수정 후 반드시 `git diff`, `git diff --check`, quality gate 명령으로 검증한다.
-
-근본 해결은 Codex 실행 환경의 sandbox/bwrap 권한 조정이 필요합니다.
