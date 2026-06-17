@@ -1,28 +1,22 @@
 import importlib
-import unittest
+
+import pytest
 
 
-class ImportSmokeTest(unittest.TestCase):
-    def test_scaffold_packages_are_importable(self) -> None:
-        module_names = [
-            "aegislm",
-            "aegislm.datasets",
-            "aegislm.evaluation",
-            "aegislm.evaluation.harness",
-            "aegislm.evaluation.validation",
-            "aegislm.inference",
-            "aegislm.inference.baseline",
-            "aegislm.prompts",
-            "aegislm.schemas",
-            "aegislm.training",
-        ]
-
-        for module_name in module_names:
-            with self.subTest(module_name=module_name):
-                self.assertEqual(
-                    importlib.import_module(module_name).__name__, module_name
-                )
-
-
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "aegislm",
+        "aegislm.datasets",
+        "aegislm.evaluation",
+        "aegislm.evaluation.harness",
+        "aegislm.evaluation.validation",
+        "aegislm.inference",
+        "aegislm.inference.baseline",
+        "aegislm.prompts",
+        "aegislm.schemas",
+        "aegislm.training",
+    ],
+)
+def test_scaffold_packages_are_importable(module_name: str) -> None:
+    assert importlib.import_module(module_name).__name__ == module_name

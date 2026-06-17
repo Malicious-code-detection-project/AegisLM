@@ -28,12 +28,15 @@ uv run mypy aegislm/ tests/
 
 ## 2. pytest Policy
 
-기존 테스트가 `unittest.TestCase` 스타일이어도 `pytest`로 실행합니다. `pytest`는 unittest 테스트를 그대로 수집할 수 있으므로, 당장 테스트 전체를 pytest fixture 스타일로 리팩터링하지 않습니다.
+테스트는 `pytest` runner와 pytest-style function/assert를 기본으로 작성합니다. 새 테스트와 기존 테스트 수정은 `unittest.TestCase`, `unittest.main()`, `self.assert*` 패턴을 추가하지 않습니다.
 
-새 테스트는 다음 기준을 따릅니다.
+테스트는 다음 기준을 따릅니다.
 
 - 동작 검증은 `tests/` 아래에 둔다.
 - fixture 파일은 `tests/fixtures/` 아래에 둔다.
+- temporary file/directory는 가능한 경우 pytest `tmp_path` fixture를 사용한다.
+- exception 검증은 `pytest.raises(..., match=...)`를 사용한다.
+- 반복 입력 검증은 plain loop assertion 또는 `pytest.mark.parametrize`를 사용한다.
 - prompt 변경은 message shape, required instruction, safety instruction을 확인한다.
 - evaluation 변경은 invalid JSON, missing field, hallucinated mapping, unsafe guidance를 확인한다.
 
