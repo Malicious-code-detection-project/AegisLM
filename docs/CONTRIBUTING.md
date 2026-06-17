@@ -84,8 +84,10 @@ uv sync
 현재 Phase D에서는 baseline inference와 evaluation 기준선 확인이 우선입니다. 코드가 추가되거나 문서 기준이 바뀐 뒤에는 가능한 범위에서 다음 명령을 사용합니다.
 
 ```bash
-uv run python -m unittest discover -s tests
+uv run pytest tests/
 uv run ruff check .
+uv run ruff format --check .
+uv run mypy aegislm/ tests/
 ```
 
 GPU, 대형 모델, 외부 dataset이 필요한 실험은 일반 테스트와 분리하고 experiment log에 기록합니다.
@@ -181,8 +183,10 @@ Owner 확인 후 진행해야 하는 작업:
 코드 변경 PR은 가능한 범위에서 아래 명령을 실행합니다.
 
 ```bash
-uv run python -m unittest discover -s tests
+uv run pytest tests/
 uv run ruff check .
+uv run ruff format --check .
+uv run mypy aegislm/ tests/
 ```
 
 변경 영역별 테스트 기준:

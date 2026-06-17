@@ -92,6 +92,7 @@ Project NuriLab은 나중에 AegisLM에서 만든 모델, LoRA adapter, 평가 �
 - `docs/EVALUATION_PLAN.md` - Phase D/E 평가 계획과 결과 리포트 기준
 - `docs/FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획
 - `docs/PR_DESCRIPTION_TEMPLATE.md` - PR 본문 작성 템플릿
+- `docs/QUALITY_GATES.md` - 코드 변경 PR 검사 기준
 - `docs/TEST_CRITERIA.md` - Phase C 테스트 기준과 평가 레퍼런스
 
 README에는 프로젝트의 큰 방향과 현재 상태만 유지합니다. 세부 기준, 실험 계획, 기여 규칙, 테스트 기준은 `docs/` 아래 문서에 기록합니다.

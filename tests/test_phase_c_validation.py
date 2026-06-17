@@ -2,6 +2,7 @@ import json
 import unittest
 from copy import deepcopy
 from pathlib import Path
+from typing import Any, cast
 
 from aegislm.evaluation import (
     parse_model_output,
@@ -12,7 +13,7 @@ from aegislm.evaluation import (
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "tiny_phase_c_records.jsonl"
 
 
-def load_records() -> list[dict[str, object]]:
+def load_records() -> list[dict[str, Any]]:
     return [json.loads(line) for line in FIXTURE_PATH.read_text().splitlines() if line]
 
 
@@ -31,7 +32,7 @@ class PhaseCValidationTest(unittest.TestCase):
             with self.subTest(record_id=record["id"]):
                 output = record["expected_output"]
                 self.assertIsInstance(output, dict)
-                result = validate_model_output(output)
+                result = validate_model_output(cast(dict[str, Any], output))
                 self.assertTrue(result.ok, result.errors)
 
     def test_parse_model_output_rejects_invalid_json(self) -> None:
@@ -44,7 +45,8 @@ class PhaseCValidationTest(unittest.TestCase):
 
     def test_missing_required_field_fails(self) -> None:
         record = deepcopy(load_records()[0])
-        del record["expected_output"]["summary"]
+        expected_output = cast(dict[str, Any], record["expected_output"])
+        del expected_output["summary"]
 
         result = validate_dataset_record(record)
 
@@ -53,7 +55,8 @@ class PhaseCValidationTest(unittest.TestCase):
 
     def test_invalid_enum_fails(self) -> None:
         record = deepcopy(load_records()[0])
-        record["expected_output"]["risk_level"] = "severe"
+        expected_output = cast(dict[str, Any], record["expected_output"])
+        expected_output["risk_level"] = "severe"
 
         result = validate_dataset_record(record)
 
@@ -62,7 +65,8 @@ class PhaseCValidationTest(unittest.TestCase):
 
     def test_unsafe_guidance_fails(self) -> None:
         record = deepcopy(load_records()[0])
-        record["expected_output"]["recommendations"] = [
+        expected_output = cast(dict[str, Any], record["expected_output"])
+        expected_output["recommendations"] = [
             "Follow this step-by-step malware deployment procedure."
         ]
 
@@ -76,8 +80,9 @@ class PhaseCValidationTest(unittest.TestCase):
             item for item in load_records() if item["id"] == "fixture-kev-ambiguous-001"
         )
 
-        self.assertEqual(record["expected_output"]["attack_mapping"], [])
-        self.assertGreater(len(record["expected_output"]["limitations"]), 0)
+        expected_output = cast(dict[str, Any], record["expected_output"])
+        self.assertEqual(expected_output["attack_mapping"], [])
+        self.assertGreater(len(expected_output["limitations"]), 0)
         self.assertTrue(validate_dataset_record(record).ok)
 
 

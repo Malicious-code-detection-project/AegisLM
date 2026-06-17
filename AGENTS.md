@@ -22,6 +22,7 @@ Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장
 | Phase C 테스트 기준과 평가 레퍼런스 | `docs/TEST_CRITERIA.md` |
 | 팀 기여 절차, 브랜치, 커밋, 검증 규칙 | `docs/CONTRIBUTING.md` |
 | PR 본문 작성 템플릿 | `docs/PR_DESCRIPTION_TEMPLATE.md` |
+| 코드 변경 PR 검사 기준 | `docs/QUALITY_GATES.md` |
 | 에이전트/개발자 공통 운영 규칙 | `AGENTS.md` |
 | Python 패키지 설정 | `pyproject.toml` |
 | 테스트 | `tests/` |
@@ -187,8 +188,10 @@ Phase B 이후의 기본 책임 경계는 다음을 목표로 한다.
 코드가 추가된 뒤 PR 전에는 가능한 범위에서 다음을 실행한다.
 
 ```bash
-uv run python -m unittest discover -s tests
+uv run pytest tests/
 uv run ruff check .
+uv run ruff format --check .
+uv run mypy aegislm/ tests/
 ```
 
 변경 영역별 테스트 기준:
@@ -213,8 +216,10 @@ PR 생성 전:
 - [ ] PR 제목이 `[AegisLM] <summary>` 형식을 따르는가?
 - [ ] 문서 변경만인지, 코드 변경인지 명확한가?
 - [ ] 코드 변경이면 관련 테스트를 추가하거나 갱신했는가?
-- [ ] 가능한 경우 `uv run python -m unittest discover -s tests` 통과
+- [ ] 가능한 경우 `uv run pytest tests/` 통과
 - [ ] 가능한 경우 `uv run ruff check .` 통과
+- [ ] 가능한 경우 `uv run ruff format --check .` 통과
+- [ ] 가능한 경우 `uv run mypy aegislm/ tests/` 통과
 - [ ] schema, dataset format, prompt contract 변경 시 README 또는 실험 계획을 갱신했는가?
 - [ ] raw dataset, checkpoint, adapter artifact, secrets, 민감 데이터가 포함되지 않았는가?
 - [ ] 실험 결과를 주장한다면 command, package version, GPU, dataset path를 기록했는가?
