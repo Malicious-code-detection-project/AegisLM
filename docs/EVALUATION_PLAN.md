@@ -154,3 +154,33 @@ uv run python scripts/run_baseline_inference.py \
 ```
 
 실제 baseline run에서는 `--backend transformers`를 사용하며, 모델 weight와 output artifact는 Git 밖에 둡니다.
+
+## 9. Phase D Fixture Smoke Run
+
+THE-58에서는 Phase C tiny fixture를 사용해 baseline prediction JSONL 생성부터 evaluation summary/report 생성까지의 흐름을 확인합니다.
+
+로컬 smoke run은 실제 모델 benchmark가 아닙니다. `--backend mock`은 evaluation harness가 invalid or incomplete model output을 어떻게 기록하는지 확인하기 위한 재현 가능한 실패 기준선입니다.
+
+```bash
+uv run python scripts/run_baseline_inference.py \
+  --dataset tests/fixtures/tiny_phase_c_records.jsonl \
+  --predictions outputs/the-58/baseline_predictions.jsonl \
+  --model-id mock-baseline-smoke \
+  --run-id the-58-smoke \
+  --backend mock \
+  --mock-raw-output '{"summary":"mock raw output"}'
+
+uv run python scripts/evaluate_predictions.py \
+  --dataset tests/fixtures/tiny_phase_c_records.jsonl \
+  --predictions outputs/the-58/baseline_predictions.jsonl \
+  --summary-json outputs/the-58/evaluation_summary.json \
+  --report-html outputs/the-58/evaluation_report.html
+```
+
+예상 관찰:
+
+- prediction JSONL, `evaluation_summary.json`, `evaluation_report.html`이 생성된다.
+- mock output은 JSON parse에는 성공하지만 required fields가 부족해 schema/hard gate는 실패한다.
+- 이 실패 결과는 harness 검증용이며, 실제 `openai/gpt-oss-20b` baseline 점수로 기록하지 않는다.
+- `outputs/`는 Git 제외 경로이므로 생성 산출물은 커밋하지 않는다.
+

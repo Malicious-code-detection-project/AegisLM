@@ -194,6 +194,8 @@ uv run ruff format --check .
 uv run mypy aegislm/ tests/
 ```
 
+테스트 코드는 pytest-style function/assert를 기본으로 작성한다. `unittest.TestCase`, `unittest.main()`, `self.assert*` 패턴은 새로 추가하지 않는다.
+
 변경 영역별 테스트 기준:
 
 - schema 변경: JSON contract와 required field 테스트

@@ -1,6 +1,4 @@
 import json
-import tempfile
-import unittest
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, cast
@@ -30,127 +28,123 @@ def prediction_for(record: dict[str, Any], output: dict[str, Any]) -> Prediction
     )
 
 
-class EvaluationHarnessTest(unittest.TestCase):
-    def test_valid_expected_outputs_score_full_points(self) -> None:
-        records = load_records()
-        predictions = [
-            prediction_for(record, cast(dict[str, Any], record["expected_output"]))
-            for record in records
-        ]
+def test_valid_expected_outputs_score_full_points() -> None:
+    records = load_records()
+    predictions = [
+        prediction_for(record, cast(dict[str, Any], record["expected_output"]))
+        for record in records
+    ]
 
-        summary = evaluate_predictions(records, predictions)
+    summary = evaluate_predictions(records, predictions)
 
-        self.assertEqual(summary["metrics"]["total_count"], 5)
-        self.assertEqual(summary["metrics"]["composite_score"], 100.0)
-        self.assertEqual(summary["metrics"]["hard_gate_pass_rate"], 1.0)
-        self.assertEqual(summary["metrics"]["json_parse_success_rate"], 1.0)
-        self.assertEqual(summary["metrics"]["schema_validation_pass_rate"], 1.0)
-        self.assertEqual(summary["metrics"]["safety_pass_rate"], 1.0)
+    assert summary["metrics"]["total_count"] == 5
+    assert summary["metrics"]["composite_score"] == 100.0
+    assert summary["metrics"]["hard_gate_pass_rate"] == 1.0
+    assert summary["metrics"]["json_parse_success_rate"] == 1.0
+    assert summary["metrics"]["schema_validation_pass_rate"] == 1.0
+    assert summary["metrics"]["safety_pass_rate"] == 1.0
 
-    def test_invalid_json_is_reported_as_parse_failure(self) -> None:
-        records = load_records()
-        prediction = Prediction(
-            record_id=str(records[0]["id"]),
-            model_id="unit-test-model",
-            run_id="unit-test-run",
-            raw_output='{ "summary": "missing end"',
-        )
 
-        summary = evaluate_predictions(records, [prediction])
-        case = summary["cases"][0]
+def test_invalid_json_is_reported_as_parse_failure() -> None:
+    records = load_records()
+    prediction = Prediction(
+        record_id=str(records[0]["id"]),
+        model_id="unit-test-model",
+        run_id="unit-test-run",
+        raw_output='{ "summary": "missing end"',
+    )
 
-        self.assertFalse(case["hard_gate_pass"])
-        self.assertFalse(case["json_parse_success"])
-        self.assertTrue(any("invalid JSON" in error for error in case["errors"]))
+    summary = evaluate_predictions(records, [prediction])
+    case = summary["cases"][0]
 
-    def test_unsafe_guidance_fails_safety_gate(self) -> None:
-        records = load_records()
-        output = cast(dict[str, Any], deepcopy(records[0]["expected_output"]))
-        output["recommendations"] = [
-            "Follow this step-by-step malware deployment procedure."
-        ]
+    assert not case["hard_gate_pass"]
+    assert not case["json_parse_success"]
+    assert any("invalid JSON" in error for error in case["errors"])
 
-        summary = evaluate_predictions(records, [prediction_for(records[0], output)])
-        case = summary["cases"][0]
 
-        self.assertFalse(case["hard_gate_pass"])
-        self.assertTrue(case["schema_valid"])
-        self.assertFalse(case["safety_pass"])
-        self.assertTrue(any("unsafe guidance" in error for error in case["errors"]))
+def test_unsafe_guidance_fails_safety_gate() -> None:
+    records = load_records()
+    output = cast(dict[str, Any], deepcopy(records[0]["expected_output"]))
+    output["recommendations"] = [
+        "Follow this step-by-step malware deployment procedure."
+    ]
 
-    def test_hallucinated_attack_mapping_reduces_mapping_score(self) -> None:
-        records = load_records()
-        output = cast(dict[str, Any], deepcopy(records[0]["expected_output"]))
-        attack_mapping = cast(list[dict[str, Any]], output["attack_mapping"])
-        attack_mapping.append(
+    summary = evaluate_predictions(records, [prediction_for(records[0], output)])
+    case = summary["cases"][0]
+
+    assert not case["hard_gate_pass"]
+    assert case["schema_valid"]
+    assert not case["safety_pass"]
+    assert any("unsafe guidance" in error for error in case["errors"])
+
+
+def test_hallucinated_attack_mapping_reduces_mapping_score() -> None:
+    records = load_records()
+    output = cast(dict[str, Any], deepcopy(records[0]["expected_output"]))
+    attack_mapping = cast(list[dict[str, Any]], output["attack_mapping"])
+    attack_mapping.append(
+        {
+            "tactic": "Defense Evasion",
+            "technique_id": "T9999",
+            "technique_name": "Unsupported Technique",
+            "evidence": "No curated evidence supports this mapping.",
+        }
+    )
+
+    summary = evaluate_predictions(records, [prediction_for(records[0], output)])
+    case = summary["cases"][0]
+
+    assert case["hard_gate_pass"]
+    assert case["hallucinated_attack_mapping_count"] == 1
+    assert case["attack_mapping_f1"] < 1.0
+    assert case["score"] < 100.0
+
+
+def test_risk_level_mismatch_reduces_score() -> None:
+    records = load_records()
+    output = cast(dict[str, Any], deepcopy(records[0]["expected_output"]))
+    output["risk_level"] = "low"
+
+    summary = evaluate_predictions(records, [prediction_for(records[0], output)])
+    case = summary["cases"][0]
+
+    assert case["hard_gate_pass"]
+    assert not case["risk_level_match"]
+    assert case["score"] == 85.0
+
+
+def test_writes_json_and_html_reports(tmp_path: Path) -> None:
+    records = load_records()
+    predictions = [
+        prediction_for(records[0], cast(dict[str, Any], records[0]["expected_output"]))
+    ]
+    summary = evaluate_predictions(records, predictions)
+    summary_path = tmp_path / "evaluation_summary.json"
+    report_path = tmp_path / "evaluation_report.html"
+
+    write_summary_json(summary, summary_path)
+    write_report_html(summary, report_path)
+
+    loaded = json.loads(summary_path.read_text())
+    assert loaded["metrics"]["composite_score"] == 100.0
+    assert "AegisLM Evaluation Report" in report_path.read_text()
+
+
+def test_load_predictions_requires_prediction_contract(tmp_path: Path) -> None:
+    path = tmp_path / "predictions.jsonl"
+    path.write_text(
+        json.dumps(
             {
-                "tactic": "Defense Evasion",
-                "technique_id": "T9999",
-                "technique_name": "Unsupported Technique",
-                "evidence": "No curated evidence supports this mapping.",
+                "record_id": "fixture-kev-deserialization-001",
+                "model_id": "unit-test-model",
+                "run_id": "unit-test-run",
+                "raw_output": "{}",
             }
         )
+        + "\n"
+    )
 
-        summary = evaluate_predictions(records, [prediction_for(records[0], output)])
-        case = summary["cases"][0]
+    predictions = load_predictions(path)
 
-        self.assertTrue(case["hard_gate_pass"])
-        self.assertEqual(case["hallucinated_attack_mapping_count"], 1)
-        self.assertLess(case["attack_mapping_f1"], 1.0)
-        self.assertLess(case["score"], 100.0)
-
-    def test_risk_level_mismatch_reduces_score(self) -> None:
-        records = load_records()
-        output = cast(dict[str, Any], deepcopy(records[0]["expected_output"]))
-        output["risk_level"] = "low"
-
-        summary = evaluate_predictions(records, [prediction_for(records[0], output)])
-        case = summary["cases"][0]
-
-        self.assertTrue(case["hard_gate_pass"])
-        self.assertFalse(case["risk_level_match"])
-        self.assertEqual(case["score"], 85.0)
-
-    def test_writes_json_and_html_reports(self) -> None:
-        records = load_records()
-        predictions = [
-            prediction_for(
-                records[0], cast(dict[str, Any], records[0]["expected_output"])
-            )
-        ]
-        summary = evaluate_predictions(records, predictions)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            summary_path = Path(tmp_dir) / "evaluation_summary.json"
-            report_path = Path(tmp_dir) / "evaluation_report.html"
-
-            write_summary_json(summary, summary_path)
-            write_report_html(summary, report_path)
-
-            loaded = json.loads(summary_path.read_text())
-            self.assertEqual(loaded["metrics"]["composite_score"], 100.0)
-            self.assertIn("AegisLM Evaluation Report", report_path.read_text())
-
-    def test_load_predictions_requires_prediction_contract(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            path = Path(tmp_dir) / "predictions.jsonl"
-            path.write_text(
-                json.dumps(
-                    {
-                        "record_id": "fixture-kev-deserialization-001",
-                        "model_id": "unit-test-model",
-                        "run_id": "unit-test-run",
-                        "raw_output": "{}",
-                    }
-                )
-                + "\n"
-            )
-
-            predictions = load_predictions(path)
-
-        self.assertEqual(predictions[0].record_id, "fixture-kev-deserialization-001")
-        self.assertEqual(predictions[0].model_id, "unit-test-model")
-
-
-if __name__ == "__main__":
-    unittest.main()
+    assert predictions[0].record_id == "fixture-kev-deserialization-001"
+    assert predictions[0].model_id == "unit-test-model"
