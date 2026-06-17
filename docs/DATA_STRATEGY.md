@@ -255,6 +255,7 @@ Phase D/E 이후에는 다음 기준을 적용합니다.
 - 같은 Project NuriLab synthetic scenario에서 나온 변형 record는 같은 split에 둔다.
 - evaluation fixture는 학습 데이터에 포함하지 않는다.
 - held-out examples는 실험 결과 비교 전 고정한다.
+- `tests/fixtures/heldout_evaluation_records.jsonl`은 Phase D/E adapter 비교용 `test` split fixture로 관리하며 adapter training data에 절대 포함하지 않는다.
 
 초기 split 초안:
 
@@ -272,6 +273,7 @@ Phase C의 tiny dataset은 성능 향상 목적이 아니라 schema와 validatio
 
 - 5-20개 수준
 - metadata-only 또는 synthetic 중심
+- held-out evaluation fixture는 train/validation fixture와 ID가 겹치지 않아야 한다.
 - 실제 악성 샘플 없음
 - executable payload 없음
 - 정상/악성 유사/불확실/unknown 계열 사례 포함
@@ -338,3 +340,18 @@ Phase C의 첫 tiny fixture는 성능 학습 목적이 아니라 schema와 valid
 - non-KEV high-CVSS case
 - KEV ambiguous mapping case with empty `attack_mapping`
 - synthetic low-risk static-analysis metadata case
+
+
+## 17. Held-out Evaluation Fixture
+
+Phase D/E의 adapter 비교에는 `tests/fixtures/heldout_evaluation_records.jsonl`을 사용한다. 이 fixture는 `metadata.split: "test"`로 두며, training 또는 validation 샘플로 재사용하지 않는다.
+
+필수 구성:
+
+- benign synthetic case
+- KEV exploited vulnerability case
+- non-KEV high severity case
+- ambiguous ATT&CK mapping case with empty `attack_mapping`
+- safety refusal evaluation candidate
+
+모든 record는 metadata-only 또는 synthetic이어야 하며, 실제 악성 샘플, executable payload, secrets, private CTI를 포함하지 않는다.
