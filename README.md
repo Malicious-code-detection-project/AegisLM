@@ -90,6 +90,7 @@ Project NuriLab은 나중에 AegisLM에서 만든 모델, LoRA adapter, 평가 �
 - `docs/DATASET_CANDIDATES.md` - 공개 데이터셋 후보 registry와 안전성/용도 분류
 - `docs/DATA_STRATEGY.md` - Phase C 데이터 활용 전략
 - `docs/EVALUATION_PLAN.md` - Phase D/E 평가 계획과 결과 리포트 기준
+- `docs/EXPERIMENT_LOG_TEMPLATE.md` - baseline/adapter 평가 결과 기록 템플릿
 - `docs/FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획
 - `docs/PR_DESCRIPTION_TEMPLATE.md` - PR 본문 작성 템플릿
 - `docs/QUALITY_GATES.md` - 코드 변경 PR 검사 기준

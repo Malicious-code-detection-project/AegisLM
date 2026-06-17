@@ -18,6 +18,7 @@ Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장
 | 공개 데이터셋 후보 registry와 안전성/용도 분류 | `docs/DATASET_CANDIDATES.md` |
 | Phase C 데이터 활용 전략 | `docs/DATA_STRATEGY.md` |
 | Phase D/E 평가 계획과 리포트 기준 | `docs/EVALUATION_PLAN.md` |
+| baseline/adapter 평가 결과 기록 템플릿 | `docs/EXPERIMENT_LOG_TEMPLATE.md` |
 | 파인튜닝 학습 로드맵과 실험 전략 | `docs/FINETUNING_EXPERIMENT_PLAN.md` |
 | Phase C 테스트 기준과 평가 레퍼런스 | `docs/TEST_CRITERIA.md` |
 | 팀 기여 절차, 브랜치, 커밋, 검증 규칙 | `docs/CONTRIBUTING.md` |
@@ -270,6 +271,5 @@ schema, dataset format, prompt contract, evaluation metric, artifact storage pol
 - Phase B scaffold 구조 확정
 - GitHub Issue template과 PR template 추가
 - GitHub Actions 기반 문서/테스트 CI 검토
-- experiment log template 추가
 - CODEOWNERS 도입 여부 검토
 - branch protection 설정 검토
