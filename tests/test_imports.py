@@ -11,6 +11,7 @@ class ImportSmokeTest(unittest.TestCase):
             "aegislm.evaluation.harness",
             "aegislm.evaluation.validation",
             "aegislm.inference",
+            "aegislm.inference.baseline",
             "aegislm.prompts",
             "aegislm.schemas",
             "aegislm.training",

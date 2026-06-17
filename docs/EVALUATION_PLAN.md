@@ -138,3 +138,19 @@ uv run python scripts/evaluate_predictions.py \
 ```
 
 이 명령은 모델 inference를 수행하지 않습니다. 이미 생성된 prediction JSONL을 평가합니다.
+
+Baseline prediction JSONL은 `scripts/run_baseline_inference.py`로 생성합니다.
+
+예시 smoke run:
+
+```bash
+uv run python scripts/run_baseline_inference.py \
+  --dataset tests/fixtures/tiny_phase_c_records.jsonl \
+  --predictions outputs/baseline_predictions.jsonl \
+  --model-id openai/gpt-oss-20b \
+  --run-id baseline-smoke \
+  --backend mock \
+  --mock-raw-output '{"summary":"mock raw output"}'
+```
+
+실제 baseline run에서는 `--backend transformers`를 사용하며, 모델 weight와 output artifact는 Git 밖에 둡니다.
