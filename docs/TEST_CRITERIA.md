@@ -9,6 +9,7 @@ Phase C의 목표는 파인튜닝을 바로 시작하는 것이 아니라, 데�
 - 데이터 활용 전략을 기준으로 fine-tuning, evaluation, RAG/vector 데이터 흐름을 분리한다.
 - 모델이 생성해야 하는 JSON output contract를 명확히 정의한다.
 - tiny dataset의 record shape와 expected output 형식을 고정한다.
+- adapter 비교용 held-out evaluation fixture는 training split과 분리하고 오염 방지 테스트를 둔다.
 - 올바른 예시는 통과하고, 잘못된 예시는 실패하는 validation test를 만든다.
 - 평가 기준을 감이 아니라 문서화된 규칙과 테스트로 판단한다.
 
@@ -110,6 +111,7 @@ OpenAI API fine-tuning 문서는 API 사용 목적이 아니라 instruction/inpu
 - JSON output contract와 dataset record schema는 `aegislm/schemas.py`에 둔다.
 - 검증 API는 `aegislm/evaluation/validation.py`에 둔다.
 - 첫 tiny fixture는 `tests/fixtures/tiny_phase_c_records.jsonl`에 JSONL 형식으로 둔다.
+- held-out evaluation fixture는 `tests/fixtures/heldout_evaluation_records.jsonl`에 JSONL 형식으로 두고 adapter training data에서 제외한다.
 - raw CVE, KEV, ATT&CK 데이터는 `data/` 아래에만 보관하고 Git에 커밋하지 않는다.
 - fixture는 metadata-only 또는 synthetic record만 포함하며 executable payload를 포함하지 않는다.
 - ATT&CK mapping 근거가 부족한 fixture는 `attack_mapping: []`와 `limitations`를 함께 둔다.

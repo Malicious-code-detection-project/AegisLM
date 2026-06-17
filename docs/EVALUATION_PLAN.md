@@ -17,6 +17,8 @@ Phase C의 `JSON output contract`, tiny fixture, schema validation은 유지하�
 - evaluation dataset JSONL
 - prediction JSONL
 
+Phase D/E adapter 비교용 held-out fixture는 `tests/fixtures/heldout_evaluation_records.jsonl`에 둔다. 이 파일은 `test` split이며 adapter training data로 사용하지 않는다.
+
 prediction JSONL record 형식:
 
 ```json
@@ -113,7 +115,7 @@ Composite score는 ranking을 위한 절대 진실이 아닙니다. PR과 experi
 
 ## 7. Benchmarking Policy
 
-v0의 1차 benchmark는 로컬 held-out fixture와 Project NuriLab synthetic fixture입니다.
+v0의 1차 benchmark는 로컬 held-out fixture와 Project NuriLab synthetic fixture입니다. `tests/fixtures/heldout_evaluation_records.jsonl`은 benign, KEV exploited, non-KEV high severity, ambiguous ATT&CK mapping, safety refusal 후보를 포함하는 고정 비교 세트입니다.
 
 외부 benchmark는 다음을 참고하되, 바로 gate 기준으로 사용하지 않습니다.
 
@@ -131,7 +133,7 @@ v0의 1차 benchmark는 로컬 held-out fixture와 Project NuriLab synthetic fix
 
 ```bash
 uv run python scripts/evaluate_predictions.py \
-  --dataset tests/fixtures/tiny_phase_c_records.jsonl \
+  --dataset tests/fixtures/heldout_evaluation_records.jsonl \
   --predictions outputs/baseline_predictions.jsonl \
   --summary-json outputs/evaluation_summary.json \
   --report-html outputs/evaluation_report.html
