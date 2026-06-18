@@ -108,6 +108,7 @@ Exit criteria:
 - Base inference works on the target GPU machine.
 - A small prompt set and expected JSON schema are documented.
 - Failure modes are recorded before training starts.
+- Phase E starts only after the gate in `docs/PHASE_D_EXIT_CRITERIA.md` is satisfied.
 
 ### Stage 1: Tiny SFT PoC
 
@@ -335,7 +336,8 @@ Record for each PoC:
 
 Phase D/E evaluation follows `docs/EVALUATION_PLAN.md`. The baseline run is
 recorded as the before state; adapter runs are compared against the same
-held-out fixture set.
+held-out fixture set. Phase D completion and Phase E readiness are judged with
+`docs/PHASE_D_EXIT_CRITERIA.md`.
 
 Primary v0 evaluation metrics:
 

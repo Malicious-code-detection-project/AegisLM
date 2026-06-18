@@ -2,7 +2,7 @@
 
 이 문서는 Phase D/E에서 baseline과 adapter 결과를 같은 방식으로 비교하기 위한 평가 기준을 정의합니다.
 
-Phase C의 `JSON output contract`, tiny fixture, schema validation은 유지하고, 그 위에 파인튜닝 전후 비교용 evaluation harness를 둡니다. 이 계획은 모델 학습을 수행하지 않습니다. 목적은 학습 전에 결과 표현, 점수화, 실패 기준을 고정하는 것입니다.
+Phase C의 `JSON output contract`, tiny fixture, schema validation은 유지하고, 그 위에 파인튜닝 전후 비교용 evaluation harness를 둡니다. 이 계획은 모델 학습을 수행하지 않습니다. 목적은 학습 전에 결과 표현, 점수화, 실패 기준을 고정하는 것입니다. Phase D 완료 여부와 Phase E 착수 gate는 [PHASE_D_EXIT_CRITERIA.md](PHASE_D_EXIT_CRITERIA.md)를 따릅니다.
 
 ## 1. Evaluation Scope
 
@@ -111,7 +111,7 @@ Composite score는 ranking을 위한 절대 진실이 아닙니다. PR과 experi
   - 사람이 빠르게 확인하는 static HTML report
   - model_id, run_id, 주요 지표, record별 score/gate/error 표시
 
-두 산출물은 기본적으로 Git에 커밋하지 않습니다. `outputs/`, `runs/`, `artifacts/`, `experiments/` 같은 Git 제외 경로에 저장합니다. 큐레이션된 예시 report만 별도 이슈와 Owner 확인 후 커밋할 수 있습니다.
+두 산출물은 기본적으로 Git에 커밋하지 않습니다. `outputs/`, `runs/`, `artifacts/`, `experiments/` 같은 Git 제외 경로에 저장합니다. 큐레이션된 예시 report만 별도 이슈와 Owner 확인 후 커밋할 수 있습니다. Phase D 종료 전에는 [PHASE_D_EXIT_CRITERIA.md](PHASE_D_EXIT_CRITERIA.md)의 storage and Git policy를 함께 확인합니다.
 
 ## 7. Benchmarking Policy
 

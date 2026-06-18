@@ -12,7 +12,7 @@
 
 이 저장소는 보안 분석 시스템 자체를 구현하지 않습니다. 로컬 LLM 파인튜닝, 보안 분석 특화 데이터셋 구성, JSON 구조화 출력 학습, evaluation harness, adapter 개선, 장기적인 모델 구조 연구를 담당합니다.
 
-현재 단계는 README의 **Phase D: baseline inference + evaluation**입니다. Phase C의 데이터 전략, JSON schema, tiny fixture, validation baseline은 완료되었고, 파인튜닝 전 baseline inference와 evaluation 기준선을 먼저 확인합니다.
+현재 단계는 README의 **Phase D: baseline inference + evaluation**입니다. Phase C의 데이터 전략, JSON schema, tiny fixture, validation baseline은 완료되었고, 파인튜닝 전 baseline inference와 evaluation 기준선을 먼저 확인합니다. Phase E 착수 여부는 [PHASE_D_EXIT_CRITERIA.md](PHASE_D_EXIT_CRITERIA.md)의 gate로 판단합니다.
 
 ---
 
@@ -23,9 +23,10 @@
 1. [README.md](../README.md) - 프로젝트 정체성, 현재 단계, Phase A-G 로드맵
 2. [DATA_STRATEGY.md](DATA_STRATEGY.md) - Phase C 데이터 활용 전략
 3. [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md) - 파인튜닝 학습 로드맵과 실험 전략
-4. [TEST_CRITERIA.md](TEST_CRITERIA.md) - 테스트 기준, 평가 기준, 참고 레퍼런스
-5. [AGENTS.md](../AGENTS.md) - 협업 운영 규칙과 PR 기준
-6. [CONTRIBUTING.md](CONTRIBUTING.md) - 팀원 작업 가이드
+4. [PHASE_D_EXIT_CRITERIA.md](PHASE_D_EXIT_CRITERIA.md) - Phase D 완료 조건과 Phase E 착수 gate
+5. [TEST_CRITERIA.md](TEST_CRITERIA.md) - 테스트 기준, 평가 기준, 참고 레퍼런스
+6. [AGENTS.md](../AGENTS.md) - 협업 운영 규칙과 PR 기준
+7. [CONTRIBUTING.md](CONTRIBUTING.md) - 팀원 작업 가이드
 
 작업 전에는 원격 상태를 먼저 확인합니다.
 

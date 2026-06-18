@@ -23,7 +23,7 @@ LLM 모델 개발은 분석 파이프라인 구현과 다른 속도로 움직입
 
 현재 저장소 단계는 **Phase D: baseline inference + evaluation** 시작입니다.
 
-Phase C에서는 데이터 전략, JSON output contract, tiny fixture, schema validation test를 완료했습니다. 이제 파인튜닝을 시작하기 전에 baseline inference와 evaluation 기준선을 먼저 확인하고, 결과를 JSON summary와 HTML report로 기록합니다.
+Phase C에서는 데이터 전략, JSON output contract, tiny fixture, schema validation test를 완료했습니다. 이제 파인튜닝을 시작하기 전에 baseline inference와 evaluation 기준선을 먼저 확인하고, 결과를 JSON summary와 HTML report로 기록합니다. Phase E 착수 여부는 `docs/PHASE_D_EXIT_CRITERIA.md`의 gate로 판단합니다.
 
 초기 기준 모델은 `openai/gpt-oss-20b`입니다.
 
@@ -91,6 +91,7 @@ Project NuriLab은 나중에 AegisLM에서 만든 모델, LoRA adapter, 평가 �
 - `docs/DATA_STRATEGY.md` - Phase C 데이터 활용 전략
 - `docs/EVALUATION_PLAN.md` - Phase D/E 평가 계획과 결과 리포트 기준
 - `docs/EXPERIMENT_LOG_TEMPLATE.md` - baseline/adapter 평가 결과 기록 템플릿
+- `docs/PHASE_D_EXIT_CRITERIA.md` - Phase D 완료 조건과 Phase E 착수 gate
 - `docs/FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획
 - `docs/PR_DESCRIPTION_TEMPLATE.md` - PR 본문 작성 템플릿
 - `docs/QUALITY_GATES.md` - 코드 변경 PR 검사 기준
