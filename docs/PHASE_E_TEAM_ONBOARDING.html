@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AegisLM Phase E Team Onboarding</title>
+  <style>
+    :root {
+      --ink: #18202a;
+      --muted: #5f6b7a;
+      --line: #d7dde5;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --navy: #23395d;
+      --green: #27745f;
+      --amber: #9a650f;
+      --red: #a53f45;
+      --blue: #256f9f;
+      --violet: #6c5b9a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 40px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1.4fr 0.8fr;
+      gap: 24px;
+      align-items: end;
+      padding: 28px;
+      color: #fff;
+      background: var(--navy);
+      border-radius: 8px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    h1 {
+      font-size: clamp(30px, 5vw, 56px);
+      line-height: 1.05;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 20px;
+      line-height: 1.25;
+      margin-bottom: 14px;
+    }
+
+    h3 {
+      font-size: 15px;
+      line-height: 1.3;
+      margin-bottom: 8px;
+    }
+
+    .lead {
+      max-width: 720px;
+      margin-top: 14px;
+      color: #dbe5ef;
+      font-size: 17px;
+    }
+
+    .phase-badge {
+      justify-self: end;
+      min-width: 220px;
+      padding: 18px;
+      color: var(--ink);
+      background: #fff;
+      border-radius: 8px;
+    }
+
+    .phase-badge strong {
+      display: block;
+      color: var(--green);
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    .phase-badge span {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      margin: 18px 0;
+    }
+
+    .phase {
+      min-height: 74px;
+      padding: 12px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .phase .code {
+      display: block;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .phase .label {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .phase.done {
+      border-color: #8fc7ae;
+      background: #eef8f3;
+    }
+
+    .phase.active {
+      border-color: #85afd0;
+      background: #edf6fc;
+      box-shadow: inset 0 0 0 2px #256f9f;
+    }
+
+    .section {
+      margin-top: 18px;
+      padding: 22px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .topic {
+      min-height: 182px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-top: 6px solid var(--blue);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .topic:nth-child(2) { border-top-color: var(--green); }
+    .topic:nth-child(3) { border-top-color: var(--amber); }
+    .topic:nth-child(4) { border-top-color: var(--violet); }
+
+    .topic ul, .lane ul {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .issue-flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+
+    .issue {
+      min-height: 88px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .issue strong {
+      display: inline-block;
+      margin-bottom: 6px;
+      padding: 3px 7px;
+      color: #fff;
+      background: var(--navy);
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .issue p {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .lane {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .lane .owner {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 4px 8px;
+      color: #fff;
+      background: var(--green);
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .lane:nth-child(2) .owner { background: var(--blue); }
+    .lane:nth-child(3) .owner { background: var(--amber); }
+
+    .callout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .rule {
+      padding: 16px;
+      border-radius: 8px;
+      background: #f9fafb;
+      border: 1px solid var(--line);
+    }
+
+    .rule strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .rule p {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .warning {
+      border-color: #ddb2b5;
+      background: #fff5f5;
+    }
+
+    .warning strong { color: var(--red); }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #eef1f5;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 980px) {
+      header, .grid-4, .grid-3, .callout { grid-template-columns: 1fr; }
+      .phase-badge { justify-self: stretch; }
+      .timeline { grid-template-columns: repeat(2, 1fr); }
+      .issue-flow { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 620px) {
+      main {
+        width: min(100% - 20px, 1180px);
+        padding-top: 10px;
+      }
+
+      header, .section { padding: 18px; }
+      .timeline, .issue-flow { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>AegisLM Phase E 온보딩 맵</h1>
+        <p class="lead">팀원들이 현재 이슈를 처리하면서 함께 익혀야 할 운영, 데이터 안전, SFT, 평가 기준을 한 장으로 정리한 자료입니다.</p>
+      </div>
+      <div class="phase-badge">
+        <strong>Phase E</strong>
+        <span>Tiny SFT PoC 시작. 목표는 큰 성능 향상이 아니라 학습, adapter 저장/로드, 평가 흐름의 end-to-end 검증입니다.</span>
+      </div>
+    </header>
+
+    <section class="timeline" aria-label="AegisLM phase timeline">
+      <div class="phase done"><span class="code">A</span><span class="label">정체성 정리 완료</span></div>
+      <div class="phase done"><span class="code">B</span><span class="label">저장소 scaffold 완료</span></div>
+      <div class="phase done"><span class="code">C</span><span class="label">데이터 전략 완료</span></div>
+      <div class="phase done"><span class="code">D</span><span class="label">baseline 평가 완료</span></div>
+      <div class="phase active"><span class="code">E</span><span class="label">tiny SFT PoC 진행</span></div>
+      <div class="phase"><span class="code">F</span><span class="label">dataset 확장 예정</span></div>
+      <div class="phase"><span class="code">G</span><span class="label">모델 연구 예정</span></div>
+    </section>
+
+    <section class="section">
+      <h2>이슈를 처리하며 같이 교육할 주제</h2>
+      <div class="grid-4">
+        <article class="topic">
+          <h3>프로젝트 운영</h3>
+          <p><code>THE-65</code></p>
+          <ul>
+            <li>Phase A-D 결과와 Phase E 목표</li>
+            <li>Linear issue, branch, commit, PR 흐름</li>
+            <li><code>pytest</code>, <code>ruff</code>, <code>mypy</code> 검사 기준</li>
+          </ul>
+        </article>
+        <article class="topic">
+          <h3>데이터와 안전 기준</h3>
+          <p><code>THE-67</code>, <code>THE-68</code></p>
+          <ul>
+            <li>metadata-only 또는 synthetic 데이터</li>
+            <li>training set과 held-out fixture 분리</li>
+            <li>unsafe guidance와 민감 데이터 제외</li>
+          </ul>
+        </article>
+        <article class="topic">
+          <h3>평가와 리포트</h3>
+          <p><code>THE-72</code>, <code>THE-73</code>, <code>THE-74</code></p>
+          <ul>
+            <li>loss만으로 성공 판단하지 않기</li>
+            <li>JSON validity, schema, safety, ATT&amp;CK mapping</li>
+            <li>baseline 대비 adapter 개선 판단</li>
+          </ul>
+        </article>
+        <article class="topic">
+          <h3>실험 환경과 SFT</h3>
+          <p><code>THE-66</code>, <code>THE-69</code>, <code>THE-70</code>, <code>THE-71</code></p>
+          <ul>
+            <li>GPU, CUDA, PyTorch, TRL, PEFT, Unsloth</li>
+            <li>LoRA와 QLoRA 기본 개념</li>
+            <li>adapter, checkpoint, HF private repo 관리</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Phase E 이슈 흐름</h2>
+      <div class="issue-flow">
+        <article class="issue"><strong>THE-65</strong><p>문서 기준을 Phase D 완료, Phase E 시작 상태로 전환</p></article>
+        <article class="issue"><strong>THE-66</strong><p>GPU와 runtime 환경 검증</p></article>
+        <article class="issue"><strong>THE-67</strong><p>tiny SFT training dataset 준비</p></article>
+        <article class="issue"><strong>THE-68</strong><p>SFT dataset formatting helper 추가</p></article>
+        <article class="issue"><strong>THE-69</strong><p>training config와 dry-run check 추가</p></article>
+        <article class="issue"><strong>THE-70</strong><p>Unsloth QLoRA tiny SFT PoC 실행</p></article>
+        <article class="issue"><strong>THE-71</strong><p>TRL LoRA 또는 QLoRA 경로 검증</p></article>
+        <article class="issue"><strong>THE-72</strong><p>adapter load와 inference 확인 경로 추가</p></article>
+        <article class="issue"><strong>THE-73</strong><p>held-out fixture로 adapter 평가</p></article>
+        <article class="issue"><strong>THE-74</strong><p>PoC 결과 기록과 v0 training path 선택</p></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>추천 역할 분담</h2>
+      <div class="grid-3">
+        <article class="lane">
+          <span class="owner">Data / Schema</span>
+          <h3>학습 데이터와 안전 경계 담당</h3>
+          <ul>
+            <li>tiny SFT dataset 준비</li>
+            <li>record shape와 prompt/output boundary 확인</li>
+            <li>held-out fixture contamination 방지</li>
+          </ul>
+        </article>
+        <article class="lane">
+          <span class="owner">Runtime / Training</span>
+          <h3>환경과 학습 루프 담당</h3>
+          <ul>
+            <li>GPU/runtime dependency 확인</li>
+            <li>training config와 dry-run 관리</li>
+            <li>Unsloth와 TRL 경로 비교</li>
+          </ul>
+        </article>
+        <article class="lane">
+          <span class="owner">Evaluation / Report</span>
+          <h3>adapter 품질 판단 담당</h3>
+          <ul>
+            <li>baseline과 같은 metric으로 비교</li>
+            <li>summary JSON과 HTML report 해석</li>
+            <li>failure mode와 후속 이슈 정리</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>팀 공통 완료 기준</h2>
+      <div class="callout">
+        <div class="rule">
+          <strong>PR 전 검증</strong>
+          <p><code>uv run pytest tests/</code>, <code>uv run ruff check .</code>, <code>uv run ruff format --check .</code>, <code>uv run mypy aegislm/ tests/</code>를 기준으로 삼습니다.</p>
+        </div>
+        <div class="rule warning">
+          <strong>Git에 넣지 않는 것</strong>
+          <p>raw dataset, actual malware sample, checkpoint, adapter artifact, generated prediction/report, token, secret, private CTI는 저장소에 포함하지 않습니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      AegisLM 팀 온보딩 자료. Linear project: AegisLM. Current milestone: Phase E - Tiny SFT PoC.
+    </footer>
+  </main>
+</body>
+</html>

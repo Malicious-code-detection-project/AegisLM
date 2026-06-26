@@ -21,9 +21,9 @@ LLM 모델 개발은 분석 파이프라인 구현과 다른 속도로 움직입
 
 ## 현재 초점
 
-현재 저장소 단계는 **Phase D: baseline inference + evaluation** 시작입니다.
+현재 저장소 단계는 **Phase E: tiny SFT PoC** 시작입니다.
 
-Phase C에서는 데이터 전략, JSON output contract, tiny fixture, schema validation test를 완료했습니다. 이제 파인튜닝을 시작하기 전에 baseline inference와 evaluation 기준선을 먼저 확인하고, 결과를 JSON summary와 HTML report로 기록합니다. Phase E 착수 여부는 `docs/PHASE_D_EXIT_CRITERIA.md`의 gate로 판단합니다.
+Phase D에서는 baseline inference runner, evaluation harness, held-out fixture, experiment log template, artifact storage policy, Phase D exit criteria를 정리했습니다. 이제 Phase E에서는 작은 안전 dataset으로 SFT 학습 루프를 검증하고, adapter 저장/로드와 held-out evaluation 비교 흐름을 끝까지 확인합니다.
 
 초기 기준 모델은 `openai/gpt-oss-20b`입니다.
 
@@ -46,14 +46,14 @@ v0 단계에서는 악성코드 유사 스크립트 동작 설명, 취약점 맥
 
 데이터 활용 전략을 먼저 정리한 뒤 모델이 생성해야 할 JSON output contract를 코드와 문서 양쪽에서 고정하고, 5-20개 수준의 작은 synthetic 또는 metadata-only 학습 예시를 준비합니다. 이 단계에서는 대형 데이터셋, 실제 악성 샘플, GPU 학습, RAG embedding index 생성을 다루지 않습니다.
 
--> **Phase D: baseline inference + evaluation (진행 중)**
+**Phase D: baseline inference + evaluation (완료)**
 
-파인튜닝 전에 `openai/gpt-oss-20b` 기본 모델의 출력을 먼저 확인하고, JSON parse success, required field completeness, hallucinated ATT&CK mapping, unsafe guidance 여부를 평가합니다. 학습 전 baseline이 있어야 이후 adapter가 실제로 좋아졌는지 판단할 수 있습니다.
+파인튜닝 전에 `openai/gpt-oss-20b` 기본 모델의 출력과 평가 기준선을 확인하는 구조를 마련했습니다. baseline inference, JSON parse success, required field completeness, hallucinated ATT&CK mapping, unsafe guidance 여부를 adapter 개선 전 비교 기준으로 사용합니다.
 
 
-**Phase E: tiny SFT PoC**
+-> **Phase E: tiny SFT PoC (진행 중)**
 
-작은 데이터셋으로 Unsloth QLoRA와 Hugging Face TRL LoRA / QLoRA 경로를 비교합니다. 목표는 큰 성능 향상이 아니라, 학습 루프, adapter 저장/로드, 평가 흐름을 끝까지 검증하는 것입니다.
+작은 데이터셋으로 Unsloth QLoRA와 Hugging Face TRL LoRA / QLoRA 경로를 비교합니다. 목표는 큰 성능 향상이 아니라, 학습 루프, adapter 저장/로드, held-out evaluation 비교 흐름을 끝까지 검증하는 것입니다.
 
 **Phase F: dataset 확장 + adapter 개선**
 
@@ -92,6 +92,7 @@ Project NuriLab은 나중에 AegisLM에서 만든 모델, LoRA adapter, 평가 �
 - `docs/EVALUATION_PLAN.md` - Phase D/E 평가 계획과 결과 리포트 기준
 - `docs/EXPERIMENT_LOG_TEMPLATE.md` - baseline/adapter 평가 결과 기록 템플릿
 - `docs/PHASE_D_EXIT_CRITERIA.md` - Phase D 완료 조건과 Phase E 착수 gate
+- `docs/PHASE_E_TEAM_ONBOARDING.html` - Phase E 이슈 처리와 팀 교육 주제 인포그래픽
 - `docs/FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획
 - `docs/PR_DESCRIPTION_TEMPLATE.md` - PR 본문 작성 템플릿
 - `docs/QUALITY_GATES.md` - 코드 변경 PR 검사 기준
