@@ -16,6 +16,7 @@ Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장
 | 세부 문서 인덱스와 문서 관리 규칙 | `docs/README.md` |
 | fine-tuning adapter, checkpoint, model card, evaluation artifact 저장 정책 | `docs/ARTIFACT_STORAGE_POLICY.md` |
 | 공개 데이터셋 후보 registry와 안전성/용도 분류 | `docs/DATASET_CANDIDATES.md` |
+| Phase E 이슈 처리와 팀 교육 주제 인포그래픽 | `docs/PHASE_E_TEAM_ONBOARDING.html` |
 | Phase C 데이터 활용 전략 | `docs/DATA_STRATEGY.md` |
 | Phase D/E 평가 계획과 리포트 기준 | `docs/EVALUATION_PLAN.md` |
 | baseline/adapter 평가 결과 기록 템플릿 | `docs/EXPERIMENT_LOG_TEMPLATE.md` |
@@ -58,17 +59,16 @@ Phase F: dataset 확장 + adapter 개선
 Phase G: 직접 모델/레이어 연구
 ```
 
-현재 Phase D의 우선순위는 다음과 같다.
+현재 Phase E의 우선순위는 다음과 같다.
 
-- Phase C tiny fixture와 JSON output contract를 baseline prompt/evaluation 입력으로 사용
-- `openai/gpt-oss-20b` 기본 모델 inference 경로 확인
-- JSON parse success, required field completeness, invalid enum, unsafe guidance 평가 기준선 확인
-- hallucinated ATT&CK mapping과 근거 부족 mapping 처리 기준 확인
-- baseline 결과를 adapter 학습 전 비교 기준으로 기록
-- evaluation 결과는 JSON summary와 HTML report로 기록
-- Phase E 착수 여부는 `docs/PHASE_D_EXIT_CRITERIA.md`의 gate로 판단
-- 모델, checkpoint, adapter, raw dataset은 계속 Git 밖에 보관
-- tiny SFT PoC와 GPU 학습은 baseline inference와 evaluation 기준선 확인 이후 진행
+- Phase D baseline inference와 evaluation 기준선을 adapter 비교 기준으로 유지
+- Phase E tiny SFT training dataset을 metadata-only 또는 synthetic record로 준비
+- held-out evaluation fixture를 training data에 섞지 않음
+- SFT dataset formatting helper와 training config dry-run을 먼저 확인
+- GPU/runtime, HF access, model/cache/adapter 저장 경로를 Git 밖으로 분리
+- Unsloth QLoRA와 TRL LoRA/QLoRA 경로를 작은 PoC로 비교
+- adapter load, inference, held-out evaluation을 baseline과 같은 metric으로 검증
+- 모델, checkpoint, adapter, raw dataset, generated prediction/report는 계속 Git 밖에 보관
 
 ---
 

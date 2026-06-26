@@ -12,7 +12,7 @@
 
 이 저장소는 보안 분석 시스템 자체를 구현하지 않습니다. 로컬 LLM 파인튜닝, 보안 분석 특화 데이터셋 구성, JSON 구조화 출력 학습, evaluation harness, adapter 개선, 장기적인 모델 구조 연구를 담당합니다.
 
-현재 단계는 README의 **Phase D: baseline inference + evaluation**입니다. Phase C의 데이터 전략, JSON schema, tiny fixture, validation baseline은 완료되었고, 파인튜닝 전 baseline inference와 evaluation 기준선을 먼저 확인합니다. Phase E 착수 여부는 [PHASE_D_EXIT_CRITERIA.md](PHASE_D_EXIT_CRITERIA.md)의 gate로 판단합니다.
+현재 단계는 README의 **Phase E: tiny SFT PoC**입니다. Phase D의 baseline inference, evaluation harness, held-out fixture, experiment log, artifact policy, exit criteria는 완료 기준으로 정리되었고, 이제 작은 안전 dataset으로 SFT 학습 루프와 adapter 저장/로드, held-out evaluation 비교 흐름을 검증합니다.
 
 ---
 
@@ -24,9 +24,10 @@
 2. [DATA_STRATEGY.md](DATA_STRATEGY.md) - Phase C 데이터 활용 전략
 3. [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md) - 파인튜닝 학습 로드맵과 실험 전략
 4. [PHASE_D_EXIT_CRITERIA.md](PHASE_D_EXIT_CRITERIA.md) - Phase D 완료 조건과 Phase E 착수 gate
-5. [TEST_CRITERIA.md](TEST_CRITERIA.md) - 테스트 기준, 평가 기준, 참고 레퍼런스
-6. [AGENTS.md](../AGENTS.md) - 협업 운영 규칙과 PR 기준
-7. [CONTRIBUTING.md](CONTRIBUTING.md) - 팀원 작업 가이드
+5. [PHASE_E_TEAM_ONBOARDING.html](PHASE_E_TEAM_ONBOARDING.html) - Phase E 이슈 처리와 팀 교육 주제 인포그래픽
+6. [TEST_CRITERIA.md](TEST_CRITERIA.md) - 테스트 기준, 평가 기준, 참고 레퍼런스
+7. [AGENTS.md](../AGENTS.md) - 협업 운영 규칙과 PR 기준
+8. [CONTRIBUTING.md](CONTRIBUTING.md) - 팀원 작업 가이드
 
 작업 전에는 원격 상태를 먼저 확인합니다.
 
@@ -41,7 +42,7 @@ git status
 
 ## 워크스페이스 구조
 
-현재 기본 구조는 다음과 같습니다. Phase C 산출물인 데이터 전략, JSON schema, tiny dataset fixture, validation test는 이 구조 위에 추가되어 있습니다. Phase D에서는 baseline inference와 evaluation helper를 이 책임 경계 안에서 확장합니다.
+현재 기본 구조는 다음과 같습니다. Phase C/D 산출물인 데이터 전략, JSON schema, tiny fixture, baseline inference, evaluation helper는 이 구조 위에 추가되어 있습니다. Phase E에서는 tiny SFT dataset, formatting helper, training config, adapter inference 확인 경로를 이 책임 경계 안에서 확장합니다.
 
 ```text
 AegisLM/
@@ -82,7 +83,7 @@ AegisLM/
 uv sync
 ```
 
-현재 Phase D에서는 baseline inference와 evaluation 기준선 확인이 우선입니다. 코드가 추가되거나 문서 기준이 바뀐 뒤에는 가능한 범위에서 다음 명령을 사용합니다.
+현재 Phase E에서는 tiny SFT PoC와 adapter 평가 흐름 확인이 우선입니다. 코드가 추가되거나 문서 기준이 바뀐 뒤에는 가능한 범위에서 다음 명령을 사용합니다.
 
 ```bash
 uv run pytest tests/
@@ -151,8 +152,8 @@ Conventional Commits 형식을 권장합니다.
 - Phase A 문서/저장소 정체성 정리 (완료)
 - Phase B 최소 scaffold 생성 (완료)
 - Phase C 데이터 전략, JSON schema, tiny dataset 준비 (완료)
-- Phase D baseline inference와 evaluation 기준 준비 (현재)
-- Phase E tiny SFT PoC
+- Phase D baseline inference와 evaluation 기준 준비 (완료)
+- Phase E tiny SFT PoC (현재)
 - Phase F dataset 확장과 adapter 개선
 - Phase G 직접 모델/레이어 연구
 
