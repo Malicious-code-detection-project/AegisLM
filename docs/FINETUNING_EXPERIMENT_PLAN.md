@@ -304,18 +304,18 @@ PyTorch and training package versions may be adjusted inside the uv environment
 to satisfy Unsloth, TRL, CUDA, and gpt-oss compatibility. Any adjustment must be
 recorded in the experiment log before training results are compared.
 
-### 8.3 공유 작업용 PC 런타임 무결성 관리
+### 8.3 Shared Development Workstation Runtime Integrity Management
 
-AegisLM 파인튜닝은 단일 공유 GPU 워크스테이션에서 일원화되어 진행됩니다. 여러 팀원이 동일한 장비에서 협업하므로, 의존성 패키지 꼬임이나 파일 유출을 방지하기 위해 **새로운 실험을 시작하거나 환경이 수정되었을 때** 다음 자가 검증 명령어를 수행하여 정합성을 상시 체크해야 합니다.
+AegisLM fine-tuning is centralized on a single shared GPU workstation. Because multiple team members collaborate on the same system, you must run the following self-verification command whenever starting a new experiment or modifying dependencies to prevent configuration drift or data leaks:
 
 ```bash
 uv run scripts/verify_gpu.py
 ```
 
-* **체크 사항**:
-  * **의존성 무결성**: 다른 작업에 의해 PyTorch, CUDA, Unsloth 등 핵심 패키지가 오염되거나 변경되었는지 검출합니다.
-  * **보안 유출 방지 (Git Ignore)**: 대용량 가중치 및 캐시 디렉토리(`checkpoints/`, `adapters/`, `models/`, `unsloth_compiled_cache/`) 및 `.env`가 실수로 Git에 올라가는 것을 사전에 차단합니다.
-  * **실험 메타데이터 아카이빙**: 실행 성공 시 갱신되는 [experiments/env_check_report.json](../experiments/env_check_report.json)의 `versions` 데이터를 해당 실험 로그의 `environment` 메타데이터에 기록하여 공유 PC의 런타임 히스토리를 추적할 수 있게 합니다.
+* **Check Items**:
+  * **Dependency Integrity**: Detects whether core packages (PyTorch, CUDA, Unsloth, etc.) have been altered or corrupted by other workloads.
+  * **Security Leak Prevention (Git Ignore)**: Prevents large weights, caching directories (`checkpoints/`, `adapters/`, `models/`, `unsloth_compiled_cache/`), and `.env` files from being accidentally staged or committed to Git.
+  * **Experiment Metadata Archiving**: Automatically updates [experiments/env_check_report.json](../experiments/env_check_report.json) upon execution. You should copy the `versions` block from this report into the `environment` metadata of your experiment log to maintain a trace of the workstation's runtime configuration history.
 
 
 ## 9. Training Stack
