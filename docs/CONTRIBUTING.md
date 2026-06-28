@@ -91,7 +91,7 @@ AegisLM 파인튜닝은 단일 공유 GPU 워크스테이션에서 일원화되�
 uv run scripts/verify_gpu.py
 ```
 
-자세한 검증 사양 및 환경 메타데이터 기록 방법은 [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md)의 `8.3 공유 작업용 PC 런타임 무결성 관리` 지침을 참고하십시오.
+자세한 검증 사양 및 환경 메타데이터 기록 방법은 [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md)의 `8.1 공유 작업용 PC 런타임 무결성 관리` 지침을 참고하십시오.
 
 ### 테스트와 정적 분석
 
