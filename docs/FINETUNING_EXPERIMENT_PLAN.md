@@ -304,6 +304,20 @@ PyTorch and training package versions may be adjusted inside the uv environment
 to satisfy Unsloth, TRL, CUDA, and gpt-oss compatibility. Any adjustment must be
 recorded in the experiment log before training results are compared.
 
+### 8.1 Shared Development Workstation Runtime Integrity Management
+
+AegisLM fine-tuning is centralized on a single shared GPU workstation. Because multiple team members collaborate on the same system, you must run the following self-verification command whenever starting a new experiment or modifying dependencies to prevent configuration drift or data leaks:
+
+```bash
+uv run scripts/verify_gpu.py
+```
+
+* **Check Items**:
+  * **Dependency Integrity**: Detects whether core packages (PyTorch, CUDA, Unsloth, etc.) have been altered or corrupted by other workloads.
+  * **Security Leak Prevention (Git Ignore)**: Prevents large weights, caching directories (`checkpoints/`, `adapters/`, `models/`, `unsloth_compiled_cache/`), and `.env` files from being accidentally staged or committed to Git.
+  * **Experiment Metadata Archiving**: Automatically updates [experiments/env_check_report.json](../experiments/env_check_report.json) upon execution. You should copy the `versions` block from this report into the `environment` metadata of your experiment log to maintain a trace of the workstation's runtime configuration history.
+
+
 ## 9. Training Stack
 
 Run a small PoC comparison before choosing the long-running training path.
@@ -386,7 +400,7 @@ rules are maintained in `docs/ARTIFACT_STORAGE_POLICY.md`.
 
 1. Confirm the NVIDIA GPU machine can load `openai/gpt-oss-20b`.
 2. Verify vLLM inference on the base model.
-3. Create a uv training environment compatible with the selected PoC stack.
+3. Create a uv training environment and verify GPU/runtime integrity via the validation script (`uv run scripts/verify_gpu.py`).
 4. Prepare a small JSONL dataset from metadata/report-only sources.
 5. Run Unsloth QLoRA PoC.
 6. Run Hugging Face TRL LoRA PoC on the same small dataset.

@@ -83,6 +83,18 @@ AegisLM/
 uv sync
 ```
 
+### 공유 작업용 PC 환경 관리 수칙
+
+AegisLM 파인튜닝은 단일 공유 GPU 워크스테이션에서 일원화되어 진행됩니다. 여러 팀원이 동일한 장비에서 협업하므로, 작업 개시 전이나 가상환경 의존성에 변경이 생겼을 때는 반드시 환경 검증 스크립트를 수행하여 **런타임 무결성**과 **보안 격리 상태(Git Ignore)**를 점검해야 합니다.
+
+```bash
+uv run scripts/verify_gpu.py
+```
+
+자세한 검증 사양 및 환경 메타데이터 기록 방법은 [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md)의 `8.1 공유 작업용 PC 런타임 무결성 관리` 지침을 참고하십시오.
+
+### 테스트와 정적 분석
+
 현재 Phase E에서는 tiny SFT PoC와 adapter 평가 흐름 확인이 우선입니다. 코드가 추가되거나 문서 기준이 바뀐 뒤에는 가능한 범위에서 다음 명령을 사용합니다.
 
 ```bash

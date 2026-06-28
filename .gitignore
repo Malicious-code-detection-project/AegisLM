@@ -28,6 +28,7 @@ outputs/
 runs/
 wandb/
 mlruns/
+unsloth_compiled_cache/
 
 # Experiment outputs stay local unless explicitly curated.
 experiments/*
