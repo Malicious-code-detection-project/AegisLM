@@ -304,6 +304,20 @@ PyTorch and training package versions may be adjusted inside the uv environment
 to satisfy Unsloth, TRL, CUDA, and gpt-oss compatibility. Any adjustment must be
 recorded in the experiment log before training results are compared.
 
+### 8.3 공유 작업용 PC 런타임 무결성 관리
+
+AegisLM 파인튜닝은 단일 공유 GPU 워크스테이션에서 일원화되어 진행됩니다. 여러 팀원이 동일한 장비에서 협업하므로, 의존성 패키지 꼬임이나 파일 유출을 방지하기 위해 **새로운 실험을 시작하거나 환경이 수정되었을 때** 다음 자가 검증 명령어를 수행하여 정합성을 상시 체크해야 합니다.
+
+```bash
+uv run scripts/verify_gpu.py
+```
+
+* **체크 사항**:
+  * **의존성 무결성**: 다른 작업에 의해 PyTorch, CUDA, Unsloth 등 핵심 패키지가 오염되거나 변경되었는지 검출합니다.
+  * **보안 유출 방지 (Git Ignore)**: 대용량 가중치 및 캐시 디렉토리(`checkpoints/`, `adapters/`, `models/`, `unsloth_compiled_cache/`) 및 `.env`가 실수로 Git에 올라가는 것을 사전에 차단합니다.
+  * **실험 메타데이터 아카이빙**: 실행 성공 시 갱신되는 [experiments/env_check_report.json](../experiments/env_check_report.json)의 `versions` 데이터를 해당 실험 로그의 `environment` 메타데이터에 기록하여 공유 PC의 런타임 히스토리를 추적할 수 있게 합니다.
+
+
 ## 9. Training Stack
 
 Run a small PoC comparison before choosing the long-running training path.
@@ -386,7 +400,7 @@ rules are maintained in `docs/ARTIFACT_STORAGE_POLICY.md`.
 
 1. Confirm the NVIDIA GPU machine can load `openai/gpt-oss-20b`.
 2. Verify vLLM inference on the base model.
-3. Create a uv training environment compatible with the selected PoC stack.
+3. Create a uv training environment and verify GPU/runtime integrity via the validation script (`uv run scripts/verify_gpu.py`).
 4. Prepare a small JSONL dataset from metadata/report-only sources.
 5. Run Unsloth QLoRA PoC.
 6. Run Hugging Face TRL LoRA PoC on the same small dataset.
