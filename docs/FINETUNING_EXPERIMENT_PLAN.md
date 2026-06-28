@@ -304,7 +304,7 @@ PyTorch and training package versions may be adjusted inside the uv environment
 to satisfy Unsloth, TRL, CUDA, and gpt-oss compatibility. Any adjustment must be
 recorded in the experiment log before training results are compared.
 
-### 8.3 Shared Development Workstation Runtime Integrity Management
+### 8.1 Shared Development Workstation Runtime Integrity Management
 
 AegisLM fine-tuning is centralized on a single shared GPU workstation. Because multiple team members collaborate on the same system, you must run the following self-verification command whenever starting a new experiment or modifying dependencies to prevent configuration drift or data leaks:
 
