@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Configure stdout to use UTF-8 if supported, otherwise fallback gracefully
+# Configure stdout to use UTF-8 if supported
 if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -22,6 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 
 # Diagnostic report container
 report: dict[str, Any] = {
+    "versions": {},
     "python_env": {},
     "system_tools": {},
     "git_ignored_paths": {},
@@ -32,258 +33,199 @@ report: dict[str, Any] = {
 
 
 def check_python_version() -> None:
-    print("=== Python Environment ===")
-    py_ver = sys.version
-    py_exec = sys.executable
-    platform_name = sys.platform
-    print(f"Python Version: {py_ver}")
-    print(f"Python Executable: {py_exec}")
-    print(f"Platform: {platform_name}\n")
-
+    py_ver = sys.version.split()[0]
     report["python_env"] = {
-        "version": py_ver,
-        "executable": py_exec,
-        "platform": platform_name,
+        "version": sys.version,
+        "executable": sys.executable,
+        "platform": sys.platform,
     }
+    report["versions"]["python"] = py_ver
 
 
 def check_system_tools() -> None:
-    print("=== System CLI Tools ===")
     uv_ok = False
     uv_version = "NOT FOUND"
     try:
-        res = subprocess.run(
-            ["uv", "--version"], capture_output=True, text=True, check=True
-        )
+        res = subprocess.run(["uv", "--version"], capture_output=True, text=True, check=True)
         uv_version = res.stdout.strip()
-        print(f"[PASS] uv CLI: {uv_version}")
         uv_ok = True
     except (subprocess.SubprocessError, FileNotFoundError):
-        print("[FAIL] uv CLI: NOT FOUND (or not in system PATH)")
+        pass
 
     report["system_tools"]["uv"] = {"ok": uv_ok, "version": uv_version}
+    
+    # Extract clean uv version (e.g. "uv 0.11.14" -> "0.11.14")
+    report["versions"]["uv"] = uv_version.split()[1] if uv_ok and len(uv_version.split()) > 1 else (uv_version if uv_ok else None)
 
-    # Optional check for NVIDIA system driver info
     nvidia_ok = False
     driver_info = "NOT AVAILABLE"
     try:
         res = subprocess.run(["nvidia-smi"], capture_output=True, text=True, check=True)
         driver_line = res.stdout.splitlines()[0] if res.stdout else "Driver detected"
         driver_info = " ".join(driver_line.split())
-        print(f"[PASS] NVIDIA Driver Info: {driver_info}")
         nvidia_ok = True
     except (subprocess.SubprocessError, FileNotFoundError):
-        print("[INFO] nvidia-smi: NOT AVAILABLE (expected on non-GPU hosts)")
+        pass
 
-    report["system_tools"]["nvidia_smi"] = {
-        "ok": nvidia_ok,
-        "info": driver_info,
-    }
-    print()
+    report["system_tools"]["nvidia_smi"] = {"ok": nvidia_ok, "info": driver_info}
 
 
 def check_git_ignored_paths() -> None:
     print("=== Git Ignore Verification ===")
-    # List of critical paths that must be ignored to prevent Git leaks
     paths_to_verify = [
         ".env",
         ".env.local",
         "checkpoints/",
         "adapters/",
         "models/",
+        "unsloth_compiled_cache/",
         "experiments/env_check_report.json",
     ]
 
     ignored_status = {}
     for path_str in paths_to_verify:
-        test_path = REPO_ROOT / path_str.rstrip("/")
+        test_path = REPO_ROOT / path_str
+        check_path = str(test_path)
+        if path_str.endswith("/") and not check_path.endswith("/"):
+            check_path += "/"
+            
         try:
-            # git check-ignore exit code 0 if ignored, 1 if not ignored
             res = subprocess.run(
-                ["git", "check-ignore", "-q", str(test_path)],
+                ["git", "check-ignore", "-q", check_path],
                 capture_output=True,
                 check=False,
             )
             is_ignored = res.returncode == 0
-            if is_ignored:
-                print(f"[PASS] Ignored by Git: {path_str}")
-                ignored_status[path_str] = "ignored"
-            else:
-                print(f"[WARN] Not explicitly ignored by Git check-ignore: {path_str}")
-                ignored_status[path_str] = "not_ignored"
+            status = "ignored" if is_ignored else "not_ignored"
+            print(f"[{'PASS' if is_ignored else 'WARN'}] Git Ignore: {path_str} -> {status}")
+            ignored_status[path_str] = status
         except (subprocess.SubprocessError, FileNotFoundError):
-            print(
-                f"[INFO] Git CLI not available. Skipping ignore check for: {path_str}"
-            )
+            print(f"[INFO] Git CLI not available. Skipping: {path_str}")
             ignored_status[path_str] = "skipped"
 
     report["git_ignored_paths"] = ignored_status
-    print()
 
 
 def check_hf_configuration() -> None:
-    print("=== Hugging Face Config & Token Security ===")
-
     # 1. HF Token Check
     token = os.environ.get("HF_TOKEN")
-    token_source = "environment variable"
+    token_source = "env var"
 
     if not token:
-        # Check standard cache file path
         token_path = Path(os.path.expanduser("~")) / ".cache" / "huggingface" / "token"
         if token_path.exists():
             try:
                 token = token_path.read_text(encoding="utf-8").strip()
-                token_source = f"cache file ({token_path})"
-            except Exception as e:
-                print(f"[WARN] Failed to read HF token from cache file: {e}")
+                token_source = "cache file"
+            except Exception:
+                pass
 
+    masked_token = None
     if token:
-        # Mask the token for safety: hf_xxxx... -> hf_••••xxxx
-        masked_token = token
-        if len(token) > 8:
-            masked_token = f"{token[:3]}••••{token[-4:]}"
-        print(f"[PASS] HF Token detected from {token_source} (masked: {masked_token})")
-        report["hf_configuration"]["token"] = {
-            "detected": True,
-            "source": token_source,
-            "masked": masked_token,
-        }
-    else:
-        print(
-            "[WARN] No HF token found (HF_TOKEN env var or cache token). Gated models may not be accessible."
-        )
-        report["hf_configuration"]["token"] = {
-            "detected": False,
-            "source": None,
-            "masked": None,
-        }
+        masked_token = f"{token[:3]}••••{token[-4:]}" if len(token) > 8 else token
+
+    report["hf_configuration"]["token"] = {
+        "detected": bool(token),
+        "source": token_source if token else None,
+        "masked": masked_token,
+    }
 
     # 2. HF Cache Location Check
     hf_home = os.environ.get("HF_HOME") or os.environ.get("HF_HUB_CACHE")
-    cache_source = "environment variable"
+    cache_source = "env var" if hf_home else "default location"
+    hf_home_path = Path(hf_home) if hf_home else Path(os.path.expanduser("~")) / ".cache" / "huggingface"
 
-    if not hf_home:
-        hf_home_path = Path(os.path.expanduser("~")) / ".cache" / "huggingface"
-        cache_source = "default location"
-    else:
-        hf_home_path = Path(hf_home)
-
+    path_ok = False
     try:
         resolved_hf_home = hf_home_path.resolve()
         resolved_repo = REPO_ROOT.resolve()
-        is_inside_repo = (
-            resolved_repo in resolved_hf_home.parents
-            or resolved_repo == resolved_hf_home
-        )
-        if is_inside_repo:
-            print(
-                f"[WARN] HF cache path is inside the Git repo: {hf_home_path} ({cache_source})"
-            )
-            print("       Ensure it is explicitly ignored or set to an external path.")
-            path_ok = False
-        else:
-            print(
-                f"[PASS] HF cache path is external to the Git repo: {hf_home_path} ({cache_source})"
-            )
-            path_ok = True
-    except Exception as e:
-        print(f"[WARN] Could not resolve HF cache path: {e}")
-        path_ok = False
+        path_ok = resolved_repo not in resolved_hf_home.parents and resolved_repo != resolved_hf_home
+    except Exception:
+        pass
 
     report["hf_configuration"]["cache"] = {
         "path": str(hf_home_path),
         "source": cache_source,
         "is_external": path_ok,
     }
-    print()
 
 
 def check_gpu_and_pytorch() -> bool:
-    print("=== PyTorch & CUDA Environment ===")
     try:
         import torch  # type: ignore[import-not-found]
     except ImportError as e:
-        print("[FAIL] PyTorch: NOT INSTALLED in the current environment.")
         report["pytorch_cuda"] = {"installed": False, "error": str(e)}
+        report["versions"]["pytorch"] = None
+        report["versions"]["cuda"] = None
         return False
 
     torch_ver = torch.__version__
     cuda_available = torch.cuda.is_available()
-    print(f"PyTorch Version: {torch_ver}")
-    print(f"CUDA Available: {cuda_available}")
+    cuda_ver = torch.version.cuda if cuda_available else None
 
     report["pytorch_cuda"] = {
         "installed": True,
         "pytorch_version": torch_ver,
         "cuda_available": cuda_available,
+        "cuda_version": cuda_ver,
+        "devices": [],
     }
+    report["versions"]["pytorch"] = torch_ver
+    report["versions"]["cuda"] = cuda_ver
 
     if not cuda_available:
-        print("[FAIL] CUDA is not available. GPU acceleration cannot be used.")
         return False
 
-    cuda_ver = torch.version.cuda
-    device_count = torch.cuda.device_count()
-    print(f"CUDA Version (PyTorch): {cuda_ver}")
-    print(f"GPU Device Count: {device_count}")
+    for i in range(torch.cuda.device_count()):
+        try:
+            prop = torch.cuda.get_device_properties(i)
+            device_name = torch.cuda.get_device_name(i)
+            total_vram_gb = round(prop.total_memory / (1024**3), 2)
+            compute_cap = f"{prop.major}.{prop.minor}"
+        except Exception as e:
+            device_name = f"Unknown Device {i}"
+            total_vram_gb = 0.0
+            compute_cap = f"unknown ({e})"
 
-    report["pytorch_cuda"]["cuda_version"] = cuda_ver
-    report["pytorch_cuda"]["devices"] = []
-
-    for i in range(device_count):
-        device_name = torch.cuda.get_device_name(i)
-        properties = torch.cuda.get_device_properties(i)
-        total_memory_gb = properties.total_memory / (1024**3)
-        print(f"  - Device [{i}]: {device_name}")
-        print(f"    Total VRAM: {total_memory_gb:.2f} GB")
-        print(f"    Compute Capability: {properties.major}.{properties.minor}")
-
-        report["pytorch_cuda"]["devices"].append(
-            {
-                "index": i,
-                "name": device_name,
-                "total_vram_gb": round(total_memory_gb, 2),
-                "compute_capability": f"{properties.major}.{properties.minor}",
-            }
-        )
+        report["pytorch_cuda"]["devices"].append({
+            "index": i,
+            "name": device_name,
+            "total_vram_gb": total_vram_gb,
+            "compute_capability": compute_cap,
+        })
 
     # Basic tensor operation on GPU
     try:
-        print("\nRunning simple GPU tensor operation...")
         device = torch.device("cuda:0")
         x = torch.randn(1000, 1000, device=device)
         y = torch.randn(1000, 1000, device=device)
         _ = torch.matmul(x, y)
         torch.cuda.synchronize(device)
-        print("[PASS] GPU tensor multiplication successful!")
         report["pytorch_cuda"]["dry_run"] = {"ok": True, "error": None}
         return True
     except Exception as e:
-        print(f"[FAIL] GPU tensor operation failed: {e}")
         report["pytorch_cuda"]["dry_run"] = {"ok": False, "error": str(e)}
         return False
 
 
 def check_llm_libraries() -> None:
-    print("\n=== LLM & Fine-Tuning Libraries ===")
-    libraries = [
-        "transformers",
-        "datasets",
-        "peft",
-        "trl",
-        "unsloth",
-    ]
-
-    for lib in libraries:
+    # Unsloth must be imported first to apply its internal optimizations and avoid warnings
+    for lib in ["unsloth", "transformers", "datasets", "peft", "trl"]:
         try:
             mod = __import__(lib)
-            version = getattr(mod, "__version__", "Installed (unknown version)")
-            print(f"[PASS] {lib:<15}: {version}")
+            version = getattr(mod, "__version__", "Installed")
             report["llm_libraries"][lib] = {"installed": True, "version": version}
-        except ImportError as e:
-            print(f"[FAIL] {lib:<15}: NOT INSTALLED")
+            report["versions"][lib] = version
+        except Exception as e:
             report["llm_libraries"][lib] = {"installed": False, "error": str(e)}
+            report["versions"][lib] = None
+
+
+def print_version_summary() -> None:
+    print("\n=== Version Verification Summary ===")
+    for lib, ver in report["versions"].items():
+        status = "[PASS]" if ver else "[FAIL]"
+        print(f"{status} {lib:<16}: {ver or 'NOT FOUND/INSTALLED'}")
 
 
 def save_report() -> Path:
@@ -310,8 +252,8 @@ def main() -> None:
     check_hf_configuration()
     gpu_ok = check_gpu_and_pytorch()
     check_llm_libraries()
-
-    # Save validation results
+    
+    print_version_summary()
     save_report()
 
     print("\n" + "=" * 50)
