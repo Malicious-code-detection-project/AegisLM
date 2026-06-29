@@ -46,16 +46,22 @@ def check_system_tools() -> None:
     uv_ok = False
     uv_version = "NOT FOUND"
     try:
-        res = subprocess.run(["uv", "--version"], capture_output=True, text=True, check=True)
+        res = subprocess.run(
+            ["uv", "--version"], capture_output=True, text=True, check=True
+        )
         uv_version = res.stdout.strip()
         uv_ok = True
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
 
     report["system_tools"]["uv"] = {"ok": uv_ok, "version": uv_version}
-    
+
     # Extract clean uv version (e.g. "uv 0.11.14" -> "0.11.14")
-    report["versions"]["uv"] = uv_version.split()[1] if uv_ok and len(uv_version.split()) > 1 else (uv_version if uv_ok else None)
+    report["versions"]["uv"] = (
+        uv_version.split()[1]
+        if uv_ok and len(uv_version.split()) > 1
+        else (uv_version if uv_ok else None)
+    )
 
     nvidia_ok = False
     driver_info = "NOT AVAILABLE"
@@ -88,7 +94,7 @@ def check_git_ignored_paths() -> None:
         check_path = str(test_path)
         if path_str.endswith("/") and not check_path.endswith("/"):
             check_path += "/"
-            
+
         try:
             res = subprocess.run(
                 ["git", "check-ignore", "-q", check_path],
@@ -97,7 +103,9 @@ def check_git_ignored_paths() -> None:
             )
             is_ignored = res.returncode == 0
             status = "ignored" if is_ignored else "not_ignored"
-            print(f"[{'PASS' if is_ignored else 'WARN'}] Git Ignore: {path_str} -> {status}")
+            print(
+                f"[{'PASS' if is_ignored else 'WARN'}] Git Ignore: {path_str} -> {status}"
+            )
             ignored_status[path_str] = status
         except (subprocess.SubprocessError, FileNotFoundError):
             print(f"[INFO] Git CLI not available. Skipping: {path_str}")
@@ -133,13 +141,20 @@ def check_hf_configuration() -> None:
     # 2. HF Cache Location Check
     hf_home = os.environ.get("HF_HOME") or os.environ.get("HF_HUB_CACHE")
     cache_source = "env var" if hf_home else "default location"
-    hf_home_path = Path(hf_home) if hf_home else Path(os.path.expanduser("~")) / ".cache" / "huggingface"
+    hf_home_path = (
+        Path(hf_home)
+        if hf_home
+        else Path(os.path.expanduser("~")) / ".cache" / "huggingface"
+    )
 
     path_ok = False
     try:
         resolved_hf_home = hf_home_path.resolve()
         resolved_repo = REPO_ROOT.resolve()
-        path_ok = resolved_repo not in resolved_hf_home.parents and resolved_repo != resolved_hf_home
+        path_ok = (
+            resolved_repo not in resolved_hf_home.parents
+            and resolved_repo != resolved_hf_home
+        )
     except Exception:
         pass
 
@@ -187,12 +202,14 @@ def check_gpu_and_pytorch() -> bool:
             total_vram_gb = 0.0
             compute_cap = f"unknown ({e})"
 
-        report["pytorch_cuda"]["devices"].append({
-            "index": i,
-            "name": device_name,
-            "total_vram_gb": total_vram_gb,
-            "compute_capability": compute_cap,
-        })
+        report["pytorch_cuda"]["devices"].append(
+            {
+                "index": i,
+                "name": device_name,
+                "total_vram_gb": total_vram_gb,
+                "compute_capability": compute_cap,
+            }
+        )
 
     # Basic tensor operation on GPU
     try:
@@ -252,7 +269,7 @@ def main() -> None:
     check_hf_configuration()
     gpu_ok = check_gpu_and_pytorch()
     check_llm_libraries()
-    
+
     print_version_summary()
     save_report()
 
