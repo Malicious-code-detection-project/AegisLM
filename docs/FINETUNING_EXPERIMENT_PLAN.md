@@ -333,6 +333,21 @@ uv run scripts/verify_gpu.py
   * **Experiment Metadata Archiving**: Automatically updates [experiments/env_check_report.json](../experiments/env_check_report.json) upon execution. You should copy the `versions` block from this report into the `environment` metadata of your experiment log to maintain a trace of the workstation's runtime configuration history.
 
 
+### 8.2 SFT Training Configuration Dry-run Check
+
+Before launching actual fine-tuning (which consumes significant GPU resources and time), you must validate your configuration schema, local directory permissions, and dataset formatting eligibility by running the dry-run script:
+
+```bash
+uv run scripts/dry_run_training.py --config configs/tiny_sft_config.json
+```
+
+Use `--check-model` to verify that the base model tokenizer can be successfully downloaded and loaded into memory:
+
+```bash
+uv run scripts/dry_run_training.py --config configs/tiny_sft_config.json --check-model
+```
+
+
 ## 9. Training Stack
 
 Run a small PoC comparison before choosing the long-running training path.

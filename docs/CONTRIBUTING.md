@@ -91,6 +91,12 @@ AegisLM 파인튜닝은 단일 공유 GPU 워크스테이션에서 일원화되�
 uv run scripts/verify_gpu.py
 ```
 
+또한, 파인튜닝 학습을 진행하기 전에 설정 파일(`config.json`)의 무결성, 로컬 디렉터리 권한, 그리고 데이터셋 가공 포맷 적격성을 사전 점검하기 위해 다음 드라이런 스크립트를 수행합니다.
+
+```bash
+uv run scripts/dry_run_training.py --config configs/tiny_sft_config.json
+```
+
 자세한 검증 사양 및 환경 메타데이터 기록 방법은 [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md)의 `8.1 공유 작업용 PC 런타임 무결성 관리` 지침을 참고하십시오.
 
 ### 테스트와 정적 분석

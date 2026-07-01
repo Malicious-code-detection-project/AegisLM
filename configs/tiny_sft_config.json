@@ -1,0 +1,23 @@
+{
+  "model": {
+    "base_model_id": "openai/gpt-oss-20b",
+    "cache_dir": "models/cache"
+  },
+  "dataset": {
+    "train_path": "data/tiny_sft_train.jsonl",
+    "val_path": "data/tiny_sft_val.jsonl"
+  },
+  "training": {
+    "adapter_method": "qlora",
+    "output_dir": "adapters/tiny-sft-poc",
+    "checkpoint_dir": "checkpoints/tiny-sft-poc",
+    "learning_rate": 0.0002,
+    "batch_size": 2,
+    "gradient_accumulation_steps": 4,
+    "epochs": 1,
+    "max_seq_length": 1024,
+    "lora_r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.05
+  }
+}
