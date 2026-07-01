@@ -235,6 +235,21 @@ Before v1 starts, require:
 - documented sample handling policy
 - owner approval
 
+### 6.1 gpt-oss Harmony / Chat Formatting Requirements
+
+The `openai/gpt-oss-20b` model expects inputs and outputs conforming to the **Harmony Response Format**. The formatting helper maps raw dataset records into standard chat-style messages, which are subsequently translated into Harmony format.
+
+#### Harmony Format Structure
+* **Hierarchy:** Harmony defines a strict role hierarchy where system instructions, user inputs, and assistant outputs are processed via distinct channel wrappers.
+* **Special Tokens:** Harmony wraps messages with control tokens (such as `<|start|>`, `<|message|>`, `<|channel|>`).
+* **Multi-channel Output:** The format splits outputs into separate streams like `analysis` (for internal reasoning) and `final` (for user-facing responses).
+
+#### Minimum Implementation Scope
+To ensure compatibility and prevent training/inference mismatches:
+1. **No Manual Token Wrapping:** The training dataset format must contain standard `messages` lists (using standard roles: `"system"`, `"user"`, `"assistant"`). Special Harmony tokens must **not** be manually hardcoded in the JSONL dataset files.
+2. **Tokenizer-Driven Conversion:** During SFT training and local evaluation/inference, the Hugging Face tokenizer's `apply_chat_template` reads the model's `chat_template.jinja` configuration and dynamically formats standard chat messages into the correct Harmony binary/text token structure.
+3. **Consistently Serialized Target Output:** The assistant response in SFT datasets must contain the raw JSON string conforming to `OUTPUT_CONTRACT_SCHEMA`, serialized deterministically (pretty-printed with 2-space indentation and sorted keys).
+
 ## 7. JSON Output Contract
 
 v0 fine-tuning output is JSON only.
