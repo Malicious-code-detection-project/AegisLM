@@ -10,8 +10,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from aegislm.environment import load_project_env  # noqa: E402
+
+load_project_env(REPO_ROOT)
+
 
 def main() -> None:
+    from aegislm.artifacts import validate_artifact_path_plan
     from aegislm.inference import (
         make_static_response_generator,
         make_transformers_response_generator,
@@ -64,6 +69,9 @@ def main() -> None:
         help="Sampling temperature for the transformers backend. 0 disables sampling.",
     )
     args = parser.parse_args()
+    validate_artifact_path_plan(
+        inputs=(args.dataset,), outputs=(args.predictions,), require_new=True
+    )
 
     if args.backend == "mock":
         if args.mock_raw_output is None:

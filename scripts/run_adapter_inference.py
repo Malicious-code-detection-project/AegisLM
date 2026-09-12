@@ -10,8 +10,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from aegislm.environment import load_project_env  # noqa: E402
+
+load_project_env(REPO_ROOT)
+
 
 def main() -> None:
+    from aegislm.artifacts import validate_artifact_path_plan
     from aegislm.inference import (
         make_static_response_generator,
         make_unsloth_response_generator,
@@ -61,7 +66,21 @@ def main() -> None:
         "--max-new-tokens",
         type=int,
         default=1024,
-        help="Maximum generated tokens for the inference backend.",
+        help="Maximum generated tokens for the legacy adapter inference backend.",
+    )
+    parser.add_argument(
+        "--max-seq-length",
+        type=int,
+        default=2048,
+        help="Maximum sequence length for the adapter inference backend.",
+    )
+    parser.add_argument(
+        "--base-model-id",
+        help="Optional pinned base identity; supply together with --model-revision.",
+    )
+    parser.add_argument(
+        "--model-revision",
+        help="Optional pinned base revision; supply together with --base-model-id.",
     )
     parser.add_argument(
         "--temperature",
@@ -70,16 +89,26 @@ def main() -> None:
         help="Sampling temperature for the inference backend. 0 disables sampling.",
     )
     args = parser.parse_args()
+    validate_artifact_path_plan(
+        inputs=(args.dataset,), outputs=(args.predictions,), require_new=True
+    )
 
     if args.backend == "mock":
         if args.mock_raw_output is None:
             parser.error("--mock-raw-output is required when --backend mock is used")
         generate_response = make_static_response_generator(args.mock_raw_output)
     else:
+        if bool(args.base_model_id) != bool(args.model_revision):
+            parser.error(
+                "--base-model-id and --model-revision must be supplied together"
+            )
         generate_response = make_unsloth_response_generator(
             adapter_path=args.adapter_path,
+            max_seq_length=args.max_seq_length,
             max_new_tokens=args.max_new_tokens,
             temperature=args.temperature,
+            revision=args.model_revision,
+            expected_base_model_id=args.base_model_id,
         )
 
     count = run_baseline_inference(
@@ -92,6 +121,9 @@ def main() -> None:
             "backend": args.backend,
             "adapter_path": str(args.adapter_path),
             "max_new_tokens": args.max_new_tokens,
+            "max_seq_length": args.max_seq_length,
+            "base_model_id": args.base_model_id,
+            "base_model_revision": args.model_revision,
             "temperature": args.temperature,
         },
     )

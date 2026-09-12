@@ -347,6 +347,31 @@ Use `--check-model` to verify that the base model tokenizer can be successfully 
 uv run scripts/dry_run_training.py --config configs/tiny_sft_config.json --check-model
 ```
 
+### 8.3 External credentials and `.env`
+
+External credentials are read from the repository-root `.env` file. Create it
+from the committed key-only template if it does not already exist, then edit it
+locally. Never paste the value into a command, log, issue, or PR.
+
+```bash
+if test ! -f .env; then (umask 077 && cp .env.example .env); fi
+chmod 600 .env
+```
+
+The only supported credential keys are:
+
+- `WANDB_API_KEY`: required only when a command explicitly uses `--wandb`
+- `HF_TOKEN`: optional; used when a Hugging Face model requires authenticated
+  access
+- `AEGISLM_INFERENCE_API_KEY`: optional; sent only to a validated loopback
+  OpenAI-compatible inference endpoint; arbitrary remote endpoints are rejected
+
+These are API/access tokens, not OAuth client IDs or client secrets. Shell/CI
+environment values take precedence over `.env`. Hugging Face implicit cached
+authentication is disabled so a run cannot silently use another workstation
+user's login. See the official [W&B environment variable reference](https://docs.wandb.ai/models/track/environment-variables)
+and [Hugging Face environment variable reference](https://huggingface.co/docs/huggingface_hub/en/package_reference/environment_variables).
+
 
 ## 9. Training Stack
 
@@ -464,3 +489,340 @@ rules are maintained in `docs/ARTIFACT_STORAGE_POLICY.md`.
   https://bazaar.abuse.ch/api/
 - VirusTotal API docs:
   https://docs.virustotal.com/docs/api-overview
+
+## 14. Current Source-v2 Experiment
+
+This section is the controlling plan for the current Phase E experiment.
+Earlier sections retain the broader and historical Phase E learning track.
+
+### Scope and completion
+
+- Canonical base: `openai/gpt-oss-20b`. The pinned Unsloth QLoRA runtime is
+  `unsloth/gpt-oss-20b-unsloth-bnb-4bit` at
+  `093fba6992ef5a7152481afec0bdfca1ac486998`.
+- Task: assess one requested CWE in one supplied C/C++ function and return
+  aegislm.source-vulnerability-assessment.v2.
+- Training: phase-f-source-v5-r1 train (10,000) and validation (1,000).
+- Primary comparison: its full-report challenge/gold pair (500).
+- Secondary comparison: phase-f-source-untouched-blind-480-v1 (480,
+  decision-only gold).
+- Project NuriLab integration is out of scope.
+
+AegisLM completes when a valid adapter reloads, base and adapter inference run,
+and comparison artifacts are written. Improvement is not a completion gate.
+The result is labeled improved, equivalent, or regressed, and the valid base
+identifier/revision, PEFT adapter, tokenizer/chat template, configs, manifests,
+predictions, reports, and limitations are retained in all three cases.
+
+### Frozen output and Harmony loss contract
+
+The exact schema is aegislm.schemas.SOURCE_ASSESSMENT_SCHEMA. It requires:
+
+- fixed schema_version aegislm.source-vulnerability-assessment.v2
+- scope.target_cwe and scope.boundary supplied_function
+- assessment: present, not_observed, or uncertain
+- assessment_basis with exact code spans, relationship, conclusion, confidence
+- findings with exact code spans, operation, evidence, confidence
+- limitations and recommendations
+
+Evidence lists contain at most eight unique exact substrings from the supplied
+function. A present assessment requires a finding; not_observed has no finding.
+
+Frozen JSONL records keep standard system/user/assistant messages and contain no
+hand-authored Harmony control tokens. The tokenizer renders the system/user
+generation prompt and a full conversation whose assistant has empty thinking
+and final-channel JSON content. The prompt token sequence must be an exact
+prefix of the full sequence. Prompt labels are -100, and only assistant channel
+tokens contribute to loss. Overlength or zero-supervision records fail before
+training.
+
+The 2026-09-10 local GPT-OSS tokenizer audit covered all 11,000 train and
+validation records. Train maximum was 1,886 tokens, validation maximum was
+1,880, and neither split overflowed 2,048.
+
+### Canonical QLoRA configuration
+
+configs/source_v2_qlora.json fixes:
+
+- rank 8, alpha 16, dropout 0.05
+- attention targets q_proj, k_proj, v_proj, o_proj
+- Unsloth split-module MoE targets gate_up_projs/down_projs in layers 7, 15,
+  and 23, matching the three-layer subset used by the GPT-OSS reference recipe
+- batch size 2, gradient accumulation 4, one epoch
+- learning rate 2e-4, warmup ratio 0.03, cosine schedule
+- adamw_8bit, Unsloth gradient checkpointing, seed 3407, no packing
+
+A deterministic, assessment-stratified 1,000-record canary precedes the full
+run. The initial 200-record trial covered too few examples per CWE and produced
+0/40 contract-valid held-out outputs, so it is retained as a failed diagnostic
+rather than used to weaken the gate under
+`adapters/source-v2-qlora/diagnostics/canary-200/`. The 1,000-record size also matches the
+small-dataset scale in the GPT-OSS reference fine-tuning recipe. The canary
+requires finite loss, non-empty assistant supervision, saved expert adapter
+tensors, successful adapter reload, and at least 90% schema/grounding pass on a
+fixed 40-record validation subset. The reload gate uses deterministic batched
+generation with a 512-token ceiling (the audited subset's gold maximum is 450
+supervised tokens); `--gate-only` reruns it without training. Raw generations
+and validation errors are retained beside the adapter for diagnosis.
+
+For the pinned Unsloth 2026.6.9, unsloth-zoo 2026.6.7, and Transformers 5.5.0
+stack, Trainer eval forward is disabled because its patched GPT-OSS
+create_causal_mask call is incompatible with Transformers 5.5. Validation is
+therefore performed by deterministic generation after persisted-adapter reload,
+which also tests the actual handoff path. Full-run checkpoints remain saved at
+the configured interval for recovery only. The current implementation promotes
+only the final adapter and records checkpoint selection as not performed; it
+does not label the final adapter as a metric-selected best checkpoint.
+Unsloth exposes each GPT-OSS expert as a plural, per-expert module rather than
+the fused Hugging Face parameter name. The training helper therefore builds a
+strict regex covering attention modules and only the configured expert layers;
+the saved-adapter gate fails if no expert tensors are present.
+
+### Canary status on 2026-09-10
+
+The 1,000-record canary completed one epoch in 882.471 seconds with training
+loss 0.132187 and 14.768 GiB peak allocated VRAM. The saved adapter contained
+expert tensors and reloaded from disk. Its resolved quantized base was
+`unsloth/gpt-oss-20b-unsloth-bnb-4bit` at commit
+`093fba6992ef5a7152481afec0bdfca1ac486998`.
+
+The held-out gate failed at 0/40. Thirty-one outputs were not parseable JSON;
+the remaining nine violated the source-v2 contract, primarily by appending a
+CWE description to `scope.target_cwe`. Raw generations show special-token
+repetition as well as ungrounded spans. The failed run remains under
+`adapters/source-v2-qlora/canary/`; the earlier 200-record failure is under
+`adapters/source-v2-qlora/diagnostics/canary-200/`.
+
+The full 10,000-record run and base/adapter challenge comparison are not run
+until this gate passes. The threshold is not lowered to promote the artifact.
+
+Offline and GPU diagnostics on 2026-09-11 separated two failures. The preserved
+40 cases contain 31 parse failures and nine parsed-but-invalid responses; 21
+never emitted EOS before the 512-token ceiling, and none began with the expected
+Harmony analysis prefix. The same fixed eight records under explicit low
+reasoning/EOS/padding produced these results:
+
+| Runtime | Batch | Parsed | Final channel | Strict pass |
+| --- | ---: | ---: | ---: | ---: |
+| base | 1 | 5/8 | 5/8 | 0/8 |
+| checkpoint 25 | 1 | 8/8 | 8/8 | 0/8 |
+| checkpoint 100 | 1 | 6/8 | 7/8 | 0/8 |
+| final/checkpoint 125 | 1 | 2/8 | 7/8 | 0/8 |
+| final/checkpoint 125 | 8 | 0/8 | 1/8 | 0/8 |
+
+The batch-dependent divergence confirms a generation/runtime interaction. The
+checkpoint trend and near-zero training loss with zero held-out validity also
+show semantic overfitting/control-token degeneration. Neither extraction alone
+nor a larger generation ceiling can repair this artifact.
+
+New recipes therefore use an explicit protocol (`reasoning_effort=low`, left
+padding, pad 200017, EOS 200002/199999, deterministic decoding), a batch-1 gate,
+and checkpoints every 25 optimizer steps. `unsloth_v2` retains the Unsloth
+adapter helper. `peft_split_control` retains the same Unsloth split-BNB loader
+but uses direct `prepare_model_for_kbit_training` and `peft.get_peft_model`.
+It is an adapter-injection control, not a vanilla Transformers fused-expert
+QLoRA claim. The A6000 load/injection preflight passed with 288 exact 4-bit
+targets, 15,040,512 trainable parameters, and 14.931 GiB peak allocated VRAM.
+
+### Recovery canary status on 2026-09-11
+
+Both recovery recipes completed training and fresh persisted-adapter reload,
+but neither passed a single held-out record. They used the same assessment-only
+1,000-record train selection digest
+`e945b83777119d809dd2f9a7c6b638c0e1b2815af1fc1fd1ea8fb741550f155d`,
+the same fixed 40-record validation digest
+`45989ea9e3a81926f13cfe73a8088d44b8b7817fcb782fd61f3ffd6b3d1b40d0`,
+and the same explicit batch-1 generation protocol.
+
+| Recipe | Train loss | Seconds | Peak VRAM | Parsed | EOS | Strict valid | W&B run |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `unsloth_v2` | 0.13205 | 863.227 | 14.768 GiB | 16/40 | 24/40 | 0/40 | `mdotwa7l` |
+| `peft_split_control` | 0.13091 | 1,216.043 | 18.081 GiB | 5/40 | 9/40 | 0/40 | `4a0wl8na` |
+
+The Unsloth-v2 output had 24 duplicate final markers, 23 tool-call markers, and
+16 rows without EOS. The direct PEFT control was worse: 34 duplicate final
+markers, 35 tool-call markers, and 31 rows without EOS. Both saved adapters had
+exactly 576 finite tensors: 192 attention and 384 expert tensors. Their
+different SHA-256 digests, active-adapter checks, and fresh reloads rule out a
+missing or accidentally reused adapter as the explanation.
+
+The earliest saved checkpoints also failed the same fixed eight diagnostic
+records. Unsloth-v2 checkpoint 25 parsed 0/8 with EOS 4/8; PEFT checkpoint 25
+parsed 6/8 with EOS 7/8 but violated the schema/grounding contract on all eight.
+The PEFT final regression therefore contains later control-token degeneration,
+but semantic validity was already zero at step 25. Additional checkpoints are
+not promoted, and diagnostic reports retain `promotion_authority=false`.
+
+Token inspection confirms that supervised targets contain the canonical empty
+analysis channel, assistant restart, final JSON channel, and return token. The
+observed failure is therefore not caused by omitting EOS from the target. The
+current evidence points to autoregressive control-token repetition and a large
+teacher-forcing/generation gap; CWE frequency imbalance is not established as
+the primary cause.
+
+An opt-in data-distribution ablation is prepared but **NOT_RUN** in
+`configs/source_v2_peft_cwe_balanced.json`. Its versioned
+`target_cwe_assessment_round_robin_v1` selector covers all 86 observed
+`(target_cwe, assessment)` strata without replacement and produces train digest
+`b98b65c5d0475ed0c0e29365fa72374303111b524b28f46ba2fffad77baaa8c9`.
+Only 105/1,000 records overlap the assessment-only canary, so this is a major
+distribution ablation rather than a backend control. The validation fixture,
+protocol, hyperparameters, and 90% gate remain unchanged. Run it only after a
+separate issue records the hypothesis and accepts rare-CWE oversampling and
+memorization risk; do not infer that balancing will repair the observed
+Harmony/schema failure.
+
+The canonical OpenAI MXFP4 checkpoint cannot currently be converted into a
+vanilla bitsandbytes fused-expert QLoRA control on this 48 GB stack: its expert
+parameters are not ordinary quantizable `nn.Linear` modules, and dequantizing
+them is outside the available memory budget. Revisit that path only with native
+3D expert quantization support or an 80 GB-class fused BF16 LoRA environment.
+
+Primary commands:
+
+    uv run python scripts/audit_source_dataset.py \
+      --train data/processed/phase-f-source-v5-r1/train.jsonl \
+      --validation data/processed/phase-f-source-v5-r1/validation.jsonl \
+      --challenge data/processed/phase-f-source-v5-r1/challenge.jsonl \
+      --gold data/processed/phase-f-source-v5-r1/gold.jsonl \
+      --output outputs/source-v2/data-audit.json
+
+    uv run python scripts/audit_source_tokens.py \
+      --tokenizer adapters/source-v2-qlora/canary/final \
+      --train data/processed/phase-f-source-v5-r1/train.jsonl \
+      --validation data/processed/phase-f-source-v5-r1/validation.jsonl \
+      --reasoning-effort low \
+      --output outputs/source-v2/token-audit.json
+
+    uv run python scripts/train_source_unsloth.py \
+      --config configs/source_v2_unsloth_v2.json --stage canary
+
+    uv run python scripts/train_source_peft_control.py \
+      --config configs/source_v2_peft_control.json --stage canary
+
+    uv run python scripts/train_source_peft_control.py \
+      --config configs/source_v2_peft_cwe_balanced.json --stage canary \
+      --prepare-only
+
+    uv run python scripts/train_source_unsloth.py \
+      --config configs/source_v2_unsloth_v2.json --stage full
+
+`--gate-only` requires a new `--gate-output-dir`; it never overwrites a prior
+gate report or prediction file. The resolved output must remain in a
+Git-ignored/external location and outside the adapter and checkpoint trees.
+Both training entrypoints load the frozen train and validation splits and
+reject any cross-split record-ID or canonical source-code digest overlap before
+selection, stage reservation, W&B initialization, or promotion checks.
+Training stages are exclusively reserved before model loading; an existing,
+finalized, or mixed stage is rejected before training can overwrite it. Resume
+is explicit and is limited to a direct `checkpoint-N` child of the configured
+stage whose reservation has the same config digest. `--gate-only` and
+`scripts/run_source_checkpoint_gate.py` create diagnostic-only reports with
+`promotion_authority=false`. Such reports cannot open a full stage.
+The omitted Unsloth config now resolves to `source_v2_unsloth_v2.json`.
+`legacy_unsloth` remains available only for reproduction/diagnostics and cannot
+run or authorize a full stage.
+
+Add `--wandb` only to a real canary/full training or `--gate-only` command that
+should be tracked online. W&B uses project `aegislm`, group `source-v2`, and job
+types `training`, `evaluation`, `comparison`, or `historical-import`. Trainer
+always keeps `report_to="none"` so the stock Transformers W&B callback cannot
+publish model, PEFT, output-path, or TrainingArguments configuration. When
+`--wandb` is selected, a local callback sends only finite loss, learning rate,
+gradient norm, and epoch scalars. Without the flag, the existing local execution
+path is unchanged. With the flag, a missing `WANDB_API_KEY` fails before model
+load and before configuration or dataset files are read. The W&B training
+configuration is a separate semantic projection: it accepts only the canonical
+source-v2 model IDs and pinned `093fba6992ef5a7152481afec0bdfca1ac486998`
+revision, SHA-256 dataset identities, the approved
+optimizer/scheduler and attention-module domains, bounded expert-layer indices,
+the versioned train-selection strategy, and bounded numeric hyperparameters.
+Local paths are never part of that projection.
+Training, persisted-adapter gate-only, and checkpoint-diagnostic W&B runs use
+digest-derived deterministic IDs and Git-ignored receipts. The receipt is
+written in `pending` state before network initialization, resumes only the same
+identity after interruption, and becomes `complete` only after W&B finish
+succeeds. A completed receipt is checked before immutable stage/output
+reservation and makes the same logical command a no-op. A pending diagnostic
+receipt can resume the same remote identity while using a fresh local output
+directory. Receipt preparation holds an exclusive, non-blocking process lock
+through remote logging and finish, so a simultaneous invocation is rejected
+before W&B initialization instead of duplicating metrics or tables. Process
+exit releases the ownership lock for a subsequent same-identity recovery. If
+logging completed but finish failed, the next invocation performs a
+finish-only recovery before any stage/output reservation and does not retrain,
+regate, or re-upload known-logged data. Error handling keeps the claim until
+the active failure-finish call itself returns.
+
+Before W&B initialization or any callback/metric/table upload, the receipt advances from
+`pending` to `logging_ambiguous`. Because a process can die after W&B accepts a
+payload but before local acknowledgement, this state is never auto-retried.
+After inspecting the deterministic W&B run, use exactly one explicit recovery:
+
+```bash
+# Remote run has no payload; allow logging to run again.
+... --wandb --wandb-reconcile retry-logging
+
+# Remote payload is present; skip logging and recover finish only.
+... --wandb --wandb-reconcile finish-only
+```
+
+The preserved 2026-09-10 failed canary is imported idempotently with:
+
+```bash
+uv run python scripts/import_source_canary_to_wandb.py --wandb
+```
+
+The importer deterministically identifies the run from the three local source
+file digests, requires those digests and the linked train/validation/config
+digests to equal the frozen 2026-09-10 canary, and reads each JSON file once so
+the parsed bytes and digest cannot diverge. It uses `resume="never"` on the first attempt, uploads the 125-step
+scalar learning curve and aggregate gate outcome, and writes a local receipt
+under `outputs/source-v2/wandb/`. A pending receipt is written before network
+initialization. Interrupted attempts resume only the same deterministic run
+with `resume="allow"`; ambiguous attempts require the same explicit
+`--wandb-reconcile` decision; completed receipts make reruns a no-op. The importer
+uses the same process-lifetime exclusive receipt claim, and therefore rejects
+concurrent imports before remote initialization. A logged-but-unfinished retry
+skips the 125 history rows and aggregate summary and only recovers finish. It
+does not read or upload
+the raw gate predictions. The import completed on
+2026-09-11 as run
+`source-v2-canary-import-84a709909f53`; its local receipt is the canonical
+link. Re-running the command is a no-op after receipt verification.
+
+GPU training and model inference are experiment runs rather than PR unit-test
+gates. Record their commands, packages, GPU, elapsed time, peak VRAM, resolved
+model revision, and artifact paths.
+`--prepare-only` validates frozen file hashes, record shape, and deterministic
+split selection but intentionally does not tokenize; the token-audit command is
+the mandatory tokenizer/max-length preflight. A full stage also requires a
+current canonical promotion report. Promotion requires an authoritative,
+versioned report, exact nonzero counts, matching recipe/protocol/config/model,
+the selected train and validation record digests, the prediction-file digest,
+and a digest of the complete saved adapter directory (weights, adapter config,
+tokenizer, and chat template). The full-stage launcher independently reloads
+the persisted tokenizer/adapter handoff, verifies the artifact digest is
+unchanged across the gate, and re-scores the preserved prediction rows against
+the exact selected records;
+stored `parsed_output`, error strings, and aggregate assertions do not grant
+promotion. Non-finite/out-of-range rates, inconsistent counts, diagnostic
+authority, duplicate/missing IDs, and modified prediction bytes are rejected.
+
+The promotion rescorer is bound to the resolved `GenerationContract`, including
+the configured `max_new_tokens` ceiling and EOS set. Non-legacy gate rows retain
+the bounded generated token IDs, first-EOS result, raw trailing terminator, and
+Harmony flags; each field is recomputed or cross-checked during rescore. A
+non-legacy row can pass only when it terminates on one of the configured EOS
+token IDs; valid JSON ending by length or an unknown reason remains a failed row.
+A
+well-formed provenance envelope with invalid JSON/schema is a scored held-out
+failure. Missing or inconsistent provenance is a run failure and cannot be
+reclassified as a model-quality result. Source-v2 JSON/JSONL inputs use bounded
+UTF-8 streaming readers that reject JSON constants and recursive non-finite
+numbers; generated JSON uses `allow_nan=False`.
+
+These SHA-256 values establish consistency among local files, not authorship.
+A principal allowed to rewrite the adapter, predictions, and report can rebuild
+unsigned evidence; OS account permissions and human review remain the trust
+boundary. Cryptographic attestation is outside the current local PoC.

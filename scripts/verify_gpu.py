@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.metadata as importlib_metadata
 import json
 import os
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -20,13 +22,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from aegislm.environment import load_project_env  # noqa: E402
+
+load_project_env(REPO_ROOT)
+
 # Diagnostic report container
 report: dict[str, Any] = {
     "versions": {},
     "python_env": {},
     "system_tools": {},
     "git_ignored_paths": {},
+    "secret_files": {},
     "hf_configuration": {},
+    "wandb_configuration": {},
     "pytorch_cuda": {},
     "llm_libraries": {},
 }
@@ -114,28 +122,28 @@ def check_git_ignored_paths() -> None:
     report["git_ignored_paths"] = ignored_status
 
 
+def check_secret_file_permissions() -> None:
+    env_path = REPO_ROOT / ".env"
+    if not env_path.exists():
+        report["secret_files"][".env"] = {"exists": False, "mode": None, "ok": True}
+        return
+    mode = stat.S_IMODE(env_path.stat().st_mode)
+    secure = mode == 0o600
+    report["secret_files"][".env"] = {
+        "exists": True,
+        "mode": f"{mode:04o}",
+        "ok": secure,
+    }
+    print(f"[{'PASS' if secure else 'WARN'}] Secret File: .env -> mode {mode:04o}")
+
+
 def check_hf_configuration() -> None:
-    # 1. HF Token Check
+    # Authentication is intentionally environment-only for reproducibility.
     token = os.environ.get("HF_TOKEN")
-    token_source = "env var"
-
-    if not token:
-        token_path = Path(os.path.expanduser("~")) / ".cache" / "huggingface" / "token"
-        if token_path.exists():
-            try:
-                token = token_path.read_text(encoding="utf-8").strip()
-                token_source = "cache file"
-            except Exception:
-                pass
-
-    masked_token = None
-    if token:
-        masked_token = f"{token[:3]}••••{token[-4:]}" if len(token) > 8 else token
 
     report["hf_configuration"]["token"] = {
         "detected": bool(token),
-        "source": token_source if token else None,
-        "masked": masked_token,
+        "source": "environment" if token else None,
     }
 
     # 2. HF Cache Location Check
@@ -163,6 +171,22 @@ def check_hf_configuration() -> None:
         "source": cache_source,
         "is_external": path_ok,
     }
+
+
+def check_wandb_configuration() -> None:
+    """Report W&B readiness without reading or displaying credential contents."""
+    wandb_version = importlib_metadata.version("wandb")
+    dotenv_version = importlib_metadata.version("python-dotenv")
+    report["wandb_configuration"] = {
+        "api_key_detected": bool(os.environ.get("WANDB_API_KEY")),
+        "project": "aegislm",
+        "group": "source-v2",
+        "mode": "online when --wandb is selected",
+        "wandb_version": wandb_version,
+        "python_dotenv_version": dotenv_version,
+    }
+    report["versions"]["wandb"] = wandb_version
+    report["versions"]["python-dotenv"] = dotenv_version
 
 
 def check_gpu_and_pytorch() -> bool:
@@ -266,7 +290,9 @@ def main() -> None:
     check_python_version()
     check_system_tools()
     check_git_ignored_paths()
+    check_secret_file_permissions()
     check_hf_configuration()
+    check_wandb_configuration()
     gpu_ok = check_gpu_and_pytorch()
     check_llm_libraries()
 

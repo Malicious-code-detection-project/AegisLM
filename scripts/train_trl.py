@@ -14,6 +14,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from aegislm.environment import load_project_env  # noqa: E402
+
+load_project_env(REPO_ROOT)
+
 # Standard HF imports
 from transformers import (  # type: ignore[import-not-found] # noqa: E402
     AutoModelForCausalLM,

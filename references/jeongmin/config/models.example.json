@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "runtime": "codex",
+  "runtime_version": null,
+  "execution_mode": "native",
+  "max_parallel_subagents": 2,
+  "max_parallel_writers_per_worktree": 1,
+  "allow_silent_fallback": false,
+  "models": {
+    "sol": {
+      "model_id": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "availability": "unverified",
+      "last_verified": null
+    },
+    "terra": {
+      "model_id": "gpt-5.6-terra",
+      "reasoning_effort": "high",
+      "availability": "unverified",
+      "last_verified": null
+    },
+    "luna": {
+      "model_id": "gpt-5.6-luna",
+      "reasoning_effort": "low",
+      "availability": "unverified",
+      "last_verified": null
+    },
+    "astra": {
+      "model_id": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "availability": "unverified",
+      "last_verified": null
+    }
+  },
+  "note": "Model IDs are documented candidates, not proof of access in your account or installed CLI. Verify model and reasoning support before use. No credentials."
+}

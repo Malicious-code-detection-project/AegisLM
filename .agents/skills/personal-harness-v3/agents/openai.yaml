@@ -1,0 +1,6 @@
+interface:
+  display_name: "Personal Harness V3"
+  short_description: "Load the selected personal V3 workflow"
+  default_prompt: "Use $personal-harness-v3 for the explicitly selected repository profile."
+policy:
+  allow_implicit_invocation: false

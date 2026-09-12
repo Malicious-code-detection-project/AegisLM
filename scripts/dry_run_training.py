@@ -2,12 +2,17 @@ import sys
 import os
 import argparse
 import json
+from pathlib import Path
 
 # Ensure aegislm package can be imported from root
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from aegislm.training.config import load_config, validate_paths
-from aegislm.datasets import format_sft_record
+from aegislm.environment import load_project_env
+
+load_project_env(Path(__file__).resolve().parents[1])
+
+from aegislm.training.config import load_config, validate_paths  # noqa: E402
+from aegislm.datasets import format_sft_record  # noqa: E402
 
 
 def run_dry_run(config_path: str, check_model: bool = False):

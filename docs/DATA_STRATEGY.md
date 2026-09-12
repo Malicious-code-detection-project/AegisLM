@@ -355,3 +355,41 @@ Phase D/E의 adapter 비교에는 `tests/fixtures/heldout_evaluation_records.jso
 - safety refusal evaluation candidate
 
 모든 record는 metadata-only 또는 synthetic이어야 하며, 실제 악성 샘플, executable payload, secrets, private CTI를 포함하지 않는다.
+
+## 18. Phase E Source-v2 Frozen Dataset
+
+The current C/C++ fine-tuning experiment uses the Git-ignored processed dataset
+at data/processed/phase-f-source-v5-r1.
+
+| Split | Count | Model-visible shape | Purpose |
+| --- | ---: | --- | --- |
+| train | 10,000 | system/user/assistant | QLoRA training |
+| validation | 1,000 | system/user/assistant | loss and canary gates |
+| challenge | 500 | system/user only | primary base/adapter comparison |
+| gold | 500 | id/expected_output | post-inference scoring only |
+
+Train and validation are balanced 50/50 between present and not_observed. The
+2026-09-10 full audit recalculated source SHA-256 values rather than trusting
+declared hashes and found no ID or source overlap between train, validation,
+and challenge. All 11,000 supervised outputs and all 500 challenge/gold pairs
+passed their source-v2 schema, target-CWE, and exact-substring evidence checks.
+
+Known quality limitations are recorded rather than hidden:
+
+- assistant response wording is highly templated and duplicated
+- confidence values are effectively all high
+- supervised splits do not teach meaningful uncertain behavior
+- primary challenge may have been visible while the data pipeline was
+  developed, so it is held out from training but not claimed as untouched blind
+
+phase-f-source-untouched-blind-480-v1 is a secondary label-only comparison. Its
+compact gold cannot support evidence-span scoring and must not be merged with
+primary full-report metrics.
+
+Processed datasets remain outside Git. Only loaders, validators, frozen
+configuration, tests, and aggregate audit results belong in the repository.
+
+Before any source-v2 record can enter evaluation or the W&B source-free table,
+its ID must match `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$` and `target_cwe` must
+match `^CWE-[1-9][0-9]*$`. These domains prevent source text, paths, and other
+unbounded strings from being reclassified as safe identifiers.

@@ -1,6 +1,8 @@
 import os
 import json
 import pytest
+from aegislm.training import config as training_config
+from aegislm import paths as path_policy
 from aegislm.training.config import load_config, validate_paths
 
 # A valid mock config structure for testing
@@ -54,6 +56,16 @@ def test_load_config_invalid_json(tmp_path):
     with pytest.raises(ValueError) as excinfo:
         load_config(str(config_file))
     assert "Invalid JSON format" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("numeric", ["NaN", "Infinity", "1e999"])
+def test_load_config_rejects_nonfinite_numbers(tmp_path, numeric):
+    config_file = tmp_path / "nonfinite.json"
+    payload = json.dumps(VALID_CONFIG_DATA).replace("0.0002", numeric)
+    config_file.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="non-finite|non-standard"):
+        load_config(str(config_file))
 
 
 def test_validate_paths_missing_dataset():
@@ -111,3 +123,19 @@ def test_validate_paths_git_policy_violation():
     with pytest.raises(ValueError) as excinfo:
         validate_paths(config, ignore_dataset_missing=True)
     assert "Path violation" in str(excinfo.value)
+
+
+def test_git_safe_path_resolves_ignored_directory_symlinks(tmp_path, monkeypatch):
+    repository = tmp_path / "repository"
+    module_path = repository / "aegislm" / "training" / "config.py"
+    module_path.parent.mkdir(parents=True)
+    module_path.touch()
+    docs = repository / "docs"
+    docs.mkdir()
+    outputs = repository / "outputs"
+    outputs.mkdir()
+    (outputs / "escape").symlink_to(docs, target_is_directory=True)
+    policy_path = repository / "aegislm" / "paths.py"
+    monkeypatch.setattr(path_policy, "__file__", str(policy_path))
+
+    assert not training_config.is_git_safe_path(str(outputs / "escape" / "raw"))
