@@ -36,3 +36,8 @@ experiments/*
 
 # OS/editor files
 .DS_Store
+
+# Personal harness V3: local-only runtime state
+/.active-profile
+/.harness-local/
+/.codex/agents/v3-*.toml

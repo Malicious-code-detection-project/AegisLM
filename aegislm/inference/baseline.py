@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from aegislm.artifacts import load_bounded_jsonl_objects, validate_artifact_path_plan
 from aegislm.prompts import PromptMessage, format_baseline_prompt
 
 GenerateResponse = Callable[[list[PromptMessage]], str]
@@ -25,10 +26,13 @@ def run_baseline_inference(
     generation_metadata: Mapping[str, Any] | None = None,
 ) -> int:
     """Generate prediction JSONL records for one dataset file."""
+    validate_artifact_path_plan(
+        inputs=(dataset_path,), outputs=(predictions_path,), require_new=True
+    )
     dataset_records = _load_jsonl(dataset_path)
     predictions_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with predictions_path.open("w", encoding="utf-8") as output_file:
+    with predictions_path.open("x", encoding="utf-8") as output_file:
         for record in dataset_records:
             prompt_messages = format_baseline_prompt(record)
             started_at = time.perf_counter()
@@ -50,6 +54,7 @@ def run_baseline_inference(
                         },
                     },
                     ensure_ascii=False,
+                    allow_nan=False,
                 )
                 + "\n"
             )
@@ -111,19 +116,9 @@ def make_transformers_response_generator(
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    for line_number, line in enumerate(
-        path.read_text(encoding="utf-8").splitlines(), 1
-    ):
-        if not line.strip():
-            continue
-        try:
-            item = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"{path}:{line_number}: invalid JSONL: {exc.msg}") from exc
-        if not isinstance(item, dict):
-            raise ValueError(f"{path}:{line_number}: JSONL item must be an object")
-        records.append(item)
+    records, _digest = load_bounded_jsonl_objects(
+        path, description="baseline inference dataset"
+    )
     return records
 
 

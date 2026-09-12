@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "repository_map": [],
+  "team_policy_paths": [],
+  "approved_commands": [],
+  "network_policy": "deny-unless-approved",
+  "sensitive_paths": [],
+  "human_approval_required_for": [
+    "merge",
+    "push",
+    "deploy",
+    "data-migration",
+    "external-upload",
+    "untrusted-sample-execution"
+  ],
+  "note": "Populate real paths and reviewed commands. Empty commands do not mean validation passed. This file is advisory, not a sandbox."
+}

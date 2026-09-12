@@ -21,9 +21,47 @@ LLM 모델 개발은 분석 파이프라인 구현과 다른 속도로 움직입
 
 ## 현재 초점
 
-현재 저장소 단계는 **Phase E: tiny SFT PoC** 시작입니다.
+현재 저장소 단계는 **Phase E: source-v2 tiny SFT PoC**입니다.
 
-Phase D에서는 baseline inference runner, evaluation harness, held-out fixture, experiment log template, artifact storage policy, Phase D exit criteria를 정리했습니다. 이제 Phase E에서는 작은 안전 dataset으로 SFT 학습 루프를 검증하고, adapter 저장/로드와 held-out evaluation 비교 흐름을 끝까지 확인합니다.
+Phase E에서 tiny Unsloth QLoRA 학습과 adapter 저장/로드 가능성을 확인했습니다.
+현재는 data/processed/phase-f-source-v5-r1의 C/C++ 함수 단위 데이터로
+openai/gpt-oss-20b base와 source-v2 QLoRA adapter를 동일 조건에서 비교하는
+재현 가능한 학습·평가 경로를 구축합니다.
+
+2026-09-10 기준 1,000-record Unsloth QLoRA canary는 학습, expert adapter
+저장, 재로딩까지 성공했지만 held-out JSON/schema/grounding gate가 0/40으로
+실패했습니다. 따라서 full 10,000-record 학습과 base/adapter 본 비교는 아직
+실행하지 않았으며, 실패 산출물은 Git 제외 경로에 보존합니다.
+
+보존 산출물 재분석 결과 31/40은 JSON 파싱 실패였고, parse된 9건도 모두
+contract를 위반했습니다. batch 1/8 재현에서는 동일한 8건의 JSON parse가
+2/8 대 0/8로 달라져 batched generation 상호작용이 확인됐으며, checkpoint
+25/100/final의 parse가 8/8, 6/8, 2/8로 악화돼 과적합 또는 control-token
+degeneration도 별도 원인으로 확인했습니다. 수정 경로는 명시적인 low
+reasoning/EOS/padding, batch-1 gate, 25-step checkpoint와 직접 PEFT injection
+control을 사용합니다.
+
+2026-09-11 복구 카나리도 같은 40건 gate에서 모두 0/40으로 실패했습니다.
+`unsloth_v2`는 JSON parse 16/40·EOS 24/40, 직접 PEFT control은 parse
+5/40·EOS 9/40이었고 두 adapter 모두 576개 LoRA tensor를 정상 저장·재로딩한
+상태였습니다. 각 checkpoint-25의 고정 8건도 strict valid 0/8이어서 full
+학습은 계속 차단합니다. 다음 데이터 분포 ablation을 위한 CWE/assessment
+이중 층화 selector와 독립 config는 준비했지만, 현재 진단은 CWE 불균형보다
+Harmony 제어 토큰 반복과 조기 semantic contract 실패를 우선 원인으로
+지목하므로 해당 장시간 학습은 아직 실행하지 않았습니다.
+
+학습 stage와 gate evidence는 append-only로 취급합니다. 완료되었거나 일부
+산출물이 남은 stage를 같은 명령으로 다시 실행해 덮어쓰지 않으며, resume은
+동일 config의 미완료 reservation과 그 checkpoint 바로 아래에서만 허용합니다.
+full stage 승격 시에는 보고서의 집계값만 신뢰하지 않고 보존 prediction을
+다시 채점해 record 집합, adapter 전체 artifact digest와 함께 검증합니다.
+
+학습·평가·비교 결과는 선택적으로 Weights & Biases에 기록할 수 있습니다.
+연동은 `--wandb`를 명시한 실행에만 활성화됩니다. 보존된 실패 canary의
+source-free 집계와 125-step curve는 2026-09-11 W&B에 historical-import로
+기록됐고, 복구 카나리는 W&B run `mdotwa7l`과 `4a0wl8na`에 실패 결과로
+보존됐습니다. 자격 증명과 상세 실행법은
+`docs/FINETUNING_EXPERIMENT_PLAN.md`를 따릅니다.
 
 초기 기준 모델은 `openai/gpt-oss-20b`입니다.
 
@@ -67,9 +105,13 @@ LoRA / QLoRA, dataset, evaluation이 충분히 안정된 뒤 직접 모델 구�
 
 이 프로젝트는 Project Nurilab : 로컬 LLM 기반 악성코드 분석 자동화 시스템 개발 프로젝트에서 `로컬 LLM 파인 튜닝 또는 LLM 모델링` 부분을 담당하는 프로젝트입니다.
 
-Project NuriLab은 나중에 AegisLM에서 만든 모델, LoRA adapter, 평가 결과, JSON output contract를 가져다 쓸 수 있습니다. 반대로 AegisLM은 Project NuriLab의 분석 결과나 synthetic fixture를 학습 데이터 후보로 활용할 수 있습니다.
+Project NuriLab은 AegisLM의 자체 검증이 끝난 뒤 base model 식별자와
+fine-tuned adapter, 평가 결과, JSON output contract를 전달받을 수 있습니다.
+성능 결과가 향상·동등·저하 중 무엇이든 유효하게 로드되는 산출물과 결과를
+보존합니다.
 
-두 프로젝트는 연결될 수 있지만, 책임은 분리합니다.
+Project NuriLab 저장소 수정, 런타임 연결, 통합 검증은 Project NuriLab의
+책임이며 현재 AegisLM 실험 범위에 포함하지 않습니다.
 
 ## 범위 밖
 
@@ -78,6 +120,7 @@ Project NuriLab은 나중에 AegisLM에서 만든 모델, LoRA adapter, 평가 �
 - HTML 운영 보고서 생성기 구현
 - 사용자 CLI 제품화
 - Project NuriLab의 전체 배포 정책 정의
+- Project NuriLab 연동 코드, 설정, CLI, 통합 테스트 구현
 - 실제 악성 샘플 저장 또는 실행
 - secrets, private CTI, private customer data 저장
 
