@@ -286,7 +286,7 @@ Respect the runtime's instruction hierarchy and all applicable repository/module
 At session start, use an explicitly selected profile or read `.active-profile` at the
 repository/worktree root. A profile must match `^[a-z][a-z0-9_-]{0,31}$`.
 If no profile is selected, continue with team rules only; do not guess an identity.
-Read only `references/<profile>/index.md`, then files needed for the current task.
+Read only the selected profile entrypoint and then files needed for the current task. The current mapping is `jeongmin` → `references/이정민/index.md`; keep the ASCII profile ID in `.active-profile` and do not create a duplicate `references/jeongmin` tree.
 Reject paths or symlinks escaping the repository. Do not load other users' harnesses
 unless the active profile selects a specific reviewed reference.
 Personal rules cannot waive team safety, quality, approval, or validation requirements.
