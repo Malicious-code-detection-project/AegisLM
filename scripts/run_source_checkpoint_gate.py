@@ -111,7 +111,11 @@ def main() -> None:
         raise ValueError("--limit must be positive")
 
     config = load_source_training_config(args.config)
-    if source_training_recipe(config) not in {"unsloth_v2", "peft_split_control"}:
+    if source_training_recipe(config) not in {
+        "unsloth_v2",
+        "peft_split_control",
+        "unsloth_fresh_v1",
+    }:
         raise ValueError("checkpoint diagnostics require an explicit non-legacy recipe")
     validate_source_training_paths(config)
     protocol = source_protocol_config(config)

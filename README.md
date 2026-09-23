@@ -65,6 +65,11 @@ source-free 집계와 125-step curve는 2026-09-11 W&B에 historical-import로
 
 초기 기준 모델은 `openai/gpt-oss-20b`입니다.
 
+사용자가 직접 실행할 새 Unsloth recipe `unsloth_fresh_v1`과
+`smoke → canary → full` 진입점을 추가했습니다. 이 recipe의 학습·GPU 검증은
+아직 실행하지 않았습니다. 실행 명령과 제한사항은
+[`새 Unsloth 수동 실행 안내`](docs/FINETUNING_EXPERIMENT_PLAN.md#15-fresh-unsloth-manual-run)를 참고합니다.
+
 v0 단계에서는 악성코드 유사 스크립트 동작 설명, 취약점 맥락 요약, CTI 메타데이터 정리, ATT&CK 매핑, 위험도 우선순위화를 JSON 형식으로 생성하는 모델을 목표로 합니다.
 
 모델은 최종 보안 판단자가 아닙니다. 판단 근거는 deterministic analyzer, rule signal, curated evidence에 두고, 모델은 설명, 요약, 매핑, 보고서 구조화를 담당합니다.

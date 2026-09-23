@@ -826,3 +826,254 @@ These SHA-256 values establish consistency among local files, not authorship.
 A principal allowed to rewrite the adapter, predictions, and report can rebuild
 unsigned evidence; OS account permissions and human review remain the trust
 boundary. Cryptographic attestation is outside the current local PoC.
+
+## 15. Fresh Unsloth Manual Run
+
+### 상태와 실험 조건
+
+`scripts/train_source_unsloth_fresh.py`는 사용자가 직접 실행하는 새 진입점이다.
+코드 작성 시 학습·추론·GPU smoke·pytest·W&B 접속을 실행하지 않았다.
+정적 분석은 런타임 호환성이나 학습 품질의 검증을 대신하지 않는다.
+기존 실패 canary와 현재 full-stage 차단 상태도 그대로 유지한다.
+
+설정은 `configs/source_v2_unsloth_fresh.json`, recipe는 `unsloth_fresh_v1`이다.
+기존 pinned Unsloth 4-bit 모델과 source-v2 schema, 데이터셋을 유지하고
+학습률은 `2e-4`에서 `5e-5`로 낮춘다. 이는 제어 토큰 반복·출력 품질 악화를
+줄여보는 **미검증 가설**이며, 기존 실패를 해결했다고 주장하지 않는다.
+batch 2, accumulation 4, 1 epoch, rank 8, alpha 16, dropout 0.05,
+길이 2048, seed 3407, attention 및 expert layer 7/15/23을 사용한다.
+Unsloth는 모델·QLoRA를, Transformers Trainer는 학습 루프를 담당한다.
+
+새 recipe는 `dataset.challenge_path`와 `dataset.challenge_sha256`을 요구한다.
+train/validation/challenge 파일 해시와 서로 간 ID·코드 중복을 확인하고,
+train/validation의 정답 schema·근거를 검사한다. challenge는 중복 검사에만
+사용하며, challenge 정답(gold)은 학습 진입점에서 읽지 않는다.
+이 두 설정 필드는 이전 recipe에는 선택 사항이어서 기존 설정과 호환된다.
+
+### 환경과 모델 캐시
+
+저장소 루트에서 준비된 환경을 사용한다. 패키지를 자동 업그레이드하지 않는다.
+
+```bash
+cd /home/remoteuser/Desktop/AegisLM
+source experiments/training-loop-debug/activate.sh
+python scripts/train_source_unsloth_fresh.py --help
+```
+
+모델 가중치는 `model.cache_dir`를 사용한다. 토크나이저는 그 캐시를 먼저 조회하고,
+파일이 부족하면 기본 Hugging Face 캐시에서 **동일한 고정 revision**을 조회한다.
+`tokenizer.json`, `tokenizer_config.json`, `special_tokens_map.json`,
+`chat_template.jinja`가 한 snapshot에 모두 있어야 하며 서로 다른 캐시나 revision의
+파일을 섞지 않는다. 준비 결과의 `tokenizer.snapshot`에 선택한 경로를 기록하고,
+학습·재로딩에도 같은 조회 규칙으로 선택한 tokenizer를 명시적으로 전달한다.
+
+Unsloth가 가중치를 `models/cache`에, tokenizer를 기본 HF 캐시에 나눠 저장한 경우가
+있다. 가중치만 있는 캐시에 AutoTokenizer를 직접 요청하면 실제 원인은 파일 누락인데도
+`sentencepiece or tiktoken` 변환기 오류가 나올 수 있다. 먼저 캐시 파일을 확인한다.
+
+캐시가 없으면 사용자가 아래 명령으로 먼저 다운로드한다. 이 명령은 네트워크와
+모델 저장 공간을 사용하며, 코드 작성 과정에서는 실행하지 않았다.
+
+```bash
+hf download unsloth/gpt-oss-20b-unsloth-bnb-4bit \
+  --revision 093fba6992ef5a7152481afec0bdfca1ac486998 \
+  --cache-dir models/cache
+```
+
+학습용 환경은 Python 3.12.13, torch 2.10.0, Transformers 5.5.0,
+Unsloth 2026.6.9, unsloth-zoo 2026.6.7, PEFT 0.19.1, TRL 0.24.0이다.
+기존 전용 환경을 사용하며 루트 `.venv`나 lockfile을 바꾸지 않는다.
+
+### 직접 실행하는 순서
+
+먼저 전체 train/validation을 토큰화해 길이 초과와 assistant-only masking을
+검사한다. 이 단계는 로컬 tokenizer만 로드하며 모델 가중치·W&B는 사용하지 않는다.
+
+```bash
+python scripts/train_source_unsloth_fresh.py --prepare-only
+```
+
+각 명령이 성공한 뒤 다음 명령을 실행한다. `--wandb`를 빼면 로컬 기록만 남긴다.
+W&B 사용 시 기존 `.env`의 `WANDB_API_KEY`를 읽으며 원문·코드·console log·모델은
+전송하지 않는다. 키를 명령행에 넣거나 `.env`를 shell script로 source하지 않는다.
+
+```bash
+python scripts/train_source_unsloth_fresh.py --stage smoke --wandb
+```
+
+smoke는 고정 train 32건, 10 optimizer step, 고정 validation 8건이다.
+finite loss·실제 nonzero gradient·LoRA 가중치 변화·유한한 expert tensor 저장과
+별도 프로세스의 adapter 재로딩을 확인한다. 출력 점수는 진단용이며,
+`promotion_authority=false`다. smoke 출력 품질이 낮아도 실행 무결성 검증이
+성공했다면 종료 코드는 0일 수 있으므로 JSON 점수와 실행 성공을 구분한다.
+
+```bash
+python scripts/train_source_unsloth_fresh.py --stage canary --wandb
+```
+
+canary는 기존 assessment 층화 방식의 1,000건을 사용하며 smoke adapter를
+이어 학습하지 않는다. base에서 새로 학습한 뒤 별도 프로세스에서 저장 adapter를
+로드하고 고정 validation 40건에 대해 Harmony/EOS·schema·근거·안전성 gate를
+평가한다. 기본 통과 기준은 36/40이다. 25 optimizer step마다 checkpoint를
+저장하고 최근 6개를 유지한다. gate 실패 시 산출물을 보존하고 nonzero로 종료한다.
+
+```bash
+python scripts/train_source_unsloth_fresh.py --stage full --wandb
+```
+
+full은 동일 config의 canary 보고서, 전체 adapter digest, 고정 40건 prediction을
+다시 채점하여 통과한 경우에만 시작한다. base에서 전체 train 10,000건을 1 epoch
+학습하며 canary 가중치를 이어 쓰지 않는다. final adapter를 저장·재로딩한 뒤 같은
+gate를 실행한다. best checkpoint 선택은 구현하지 않으며 final을 best로 부르지 않는다.
+이 명령은 challenge 본 비교를 자동 실행하지 않는다.
+
+Trainer eval forward는 현재 고정 runtime의 mask 호환성 문제 때문에 비활성화한다.
+validation 정답 loss를 산출했다고 주장하지 않으며, 저장 후 생성 검증을 사용한다.
+모든 단계는 실제 모델 tokenizer로 전체 train/validation 토큰을 다시 확인한다.
+
+### 입력·출력 진단 로그
+
+학습 trace는 해당 stage에서 선택한 학습 레코드를 대상으로,
+Trainer Dataset 생성에 사용하는 동일한 토큰화 결과에서 만든다.
+다시 토큰화하거나 학습 데이터·프롬프트·labels를 변경하지 않는다.
+
+- `messages` : system/user/assistant 메시지
+- `input_ids`, `attention_mask`, `labels` : 배치 구성 전 학습 데이터
+- `decoded_input` : 특수 토큰을 보존한 전체 학습 시퀀스
+- `decoded_masked_input` : labels가 -100인 위치의 입력 토큰
+- `decoded_supervised_labels` : -100을 제외한 정답 토큰
+- `masked_token_count`, `supervised_token_count` : 각 구간의 토큰 수
+
+이 기록은 data collator 처리 전이다. 실제 배치 패딩, 매 optimizer 
+step의 입력 순서, logits 또는 학습 중 생성 답변을 기록한 것은 아니다.
+학습 정답과 모델이 자유 생성한 답변을 혼동하지 않는다.
+
+학습 trace는 adapter stage 내부가 아닌 adapter root에 저장한다.
+실행 시도마다 UUID가 다른 파일을 만들며, 체크포인트 재개 시에도
+이전 파일을 덮어쓰지 않는다. 완료된 학습 manifest의 
+`training_trace`에 경로, SHA-256, 레코드 수와
+`capture_point="before_data_collator"`를 기록한다.
+학습 완료 전에 중단되면 trace만 남고 manifest는 없을 수 있다.
+
+평가 prediction은 레코드 ID별로 다음 정보를 연결한다.
+
+- `input` : 원본 prompt 메시지, 지정 CWE, 모델에 전달한 input_ids와
+  attention_mask, 특수 토큰을 보존한 decoded_input
+- `raw_generation` : 종료 토큰 기준으로 정리한 생성 구간의 원문
+- `generation` : 생성 토큰 ID와 종료 사유 등
+- `extracted_final` : JSON 파서에 전달한 문자열
+- `parsed_output` : 파싱된 JSON 객체. 파싱 실패 시 null
+- `validation_errors` : 프로토콜·JSON·스키마·근거 등의 검증 오류
+
+진단 시에는 같은 평가 레코드의 입력 → raw_generation →
+extracted_final → parsed_output → validation_errors 순서로 확인한다.
+학습 trace는 정답 형식과 masking을 확인하는 별도 자료이며,
+학습과 검증 레코드를 같은 샘플이라고 가정하지 않는다.
+
+모든 원문 진단 파일은 Git 제외 로컬 artifact로 보관한다.
+W&B에는 프롬프트, 소스 코드, 정답, 생성 원문을 업로드하지 않는다.
+새 기록 필드는 기존 gate의 평가 기준이나 승격 조건을 바꾸지 않는다.
+기존 실행의 artifact에는 이 필드들이 없을 수 있다. 
+
+### 출력과 실패·재개
+
+| 위치 | 내용 |
+| --- | --- |
+| `adapters/source-v2-unsloth-fresh-v1/<stage>/final/` | adapter, tokenizer, 학습 인자 |
+| 같은 stage의 `aegislm_training_manifest.json` | config, 명령, 버전, GPU, digest, loss, 시간·VRAM |
+| 같은 stage의 `training_log.json` | 로컬 학습 curve |
+| 같은 stage의 `post_training_gate_predictions.jsonl` | 평가 입력·생성 토큰·원문 출력·추출 final·파싱 결과·검증 오류 |
+| 같은 stage의 `post_training_gate.json` | 재로딩·엄격 검증 결과 |
+| `checkpoints/source-v2-unsloth-fresh-v1/<stage>/checkpoint-N/` | 재개용 checkpoint |
+| adapter root의 `<stage>.wandb.json` | 외부 기록 완료·재시도 상태 |
+| adapter root의 `<stage>.training-trace-<uuid>.jsonl` | 선택된 학습 데이터의 메시지·토큰·labels·마스킹 진단 |
+
+위 경로는 모두 Git 제외 대상이다. stage가 이미 있으면 재실행으로 덮어쓰지 않는다.
+새 실험은 설정 파일을 복사하고 `output_dir`와 `checkpoint_dir`를 모두 새로운
+경로로 바꿔 시작한다. 설정이 달라지면 이전 canary 결과로 full을 시작할 수 없다.
+
+학습 중 중단되었고 adapter stage에 reservation만 남아 있으며 checkpoint가 완전한
+경우에만 동일 config로 재개한다. 실제 존재하는 `checkpoint-N`을 지정한다.
+예를 들어 canary의 checkpoint-25가 있다면:
+
+```bash
+python scripts/train_source_unsloth_fresh.py --stage canary \
+  --resume-from-checkpoint checkpoints/source-v2-unsloth-fresh-v1/canary/checkpoint-25
+```
+
+완성되거나 일부 저장된 `final/`, manifest 또는 gate가 있는 stage는 학습 resume
+대상이 아니다. 삭제해서 재사용하지 않는다. 재로딩 중단으로 **gate와 prediction이
+둘 다 아직 없는 경우**에는 학습을 다시 하지 않고 아래 명령으로 저장 adapter만
+검증할 수 있다. 이 내부 복구 모드는 W&B를 사용하지 않는다.
+
+```bash
+python scripts/train_source_unsloth_fresh.py --stage canary --reload-only
+```
+
+prediction만 남은 중단이나 이미 완료된 gate의 재진단에는 기존
+`run_source_checkpoint_gate.py`의 별도 진단 출력 경로를 사용한다. 완료된 stage를
+덮어쓰거나 진단 결과를 full 승격 증거로 재사용하지 않는다.
+
+```bash
+python scripts/run_source_checkpoint_gate.py \
+  --config configs/source_v2_unsloth_fresh.json \
+  --adapter adapters/source-v2-unsloth-fresh-v1/canary/final \
+  --output-dir outputs/source-v2-unsloth-fresh-v1/canary-diagnostic-01 \
+  --limit 40 --batch-size 1
+```
+
+W&B 네트워크 실패는 로컬 학습 결과와 구분한다. `logging_ambiguous` receipt이면
+기존 W&B 복구 규칙에 따라 원격 반영 여부를 확인한다. 미완료 학습 재개와 함께
+로그 기록을 재시도할 때는 `--wandb --wandb-reconcile retry-logging`을 사용한다.
+이미 원격에 기록된 run을 finish만 복구할 때는
+`--wandb --wandb-reconcile finish-only`를 사용한다. finish-only는 학습을 재개하지
+않는다. receipt 완료는 모델 품질 통과를 의미하지 않으며 로컬 gate를 확인해야 한다.
+
+### 본 학습 이후 base·adapter 비교
+
+full이 성공한 뒤 아래 명령을 별도로 실행한다. 주 평가 500건과 판단 전용 480건을
+각각 처리하며 결과를 합치지 않는다. 출력이 이미 존재하면 새 출력 경로를 사용한다.
+괄호 안에서 첫 실패 시 중단하므로 실패한 추론 결과를 다음 채점에 사용하지 않는다.
+
+```bash
+(
+  set -e
+  for AEGISLM_EVAL_SET in phase-f-source-v5-r1 phase-f-source-untouched-blind-480-v1; do
+    AEGISLM_EVAL_DATA="data/processed/$AEGISLM_EVAL_SET"
+    AEGISLM_EVAL_OUTPUT="outputs/source-v2-unsloth-fresh-v1/$AEGISLM_EVAL_SET"
+    python scripts/run_source_inference.py \
+      --dataset "$AEGISLM_EVAL_DATA/challenge.jsonl" \
+      --predictions "$AEGISLM_EVAL_OUTPUT/base.jsonl" \
+      --model-id unsloth/gpt-oss-20b-unsloth-bnb-4bit \
+      --model-revision 093fba6992ef5a7152481afec0bdfca1ac486998 \
+      --run-id "fresh-base-$AEGISLM_EVAL_SET" --backend unsloth
+    python scripts/run_source_inference.py \
+      --dataset "$AEGISLM_EVAL_DATA/challenge.jsonl" \
+      --predictions "$AEGISLM_EVAL_OUTPUT/adapter.jsonl" \
+      --model-id source-v2-unsloth-fresh-v1 \
+      --base-model-id unsloth/gpt-oss-20b-unsloth-bnb-4bit \
+      --model-revision 093fba6992ef5a7152481afec0bdfca1ac486998 \
+      --adapter-path adapters/source-v2-unsloth-fresh-v1/full/final \
+      --run-id "fresh-adapter-$AEGISLM_EVAL_SET" --backend unsloth
+    for AEGISLM_EVAL_ROLE in base adapter; do
+      python scripts/evaluate_source_predictions.py \
+        --challenge "$AEGISLM_EVAL_DATA/challenge.jsonl" \
+        --gold "$AEGISLM_EVAL_DATA/gold.jsonl" \
+        --predictions "$AEGISLM_EVAL_OUTPUT/$AEGISLM_EVAL_ROLE.jsonl" \
+        --summary-json "$AEGISLM_EVAL_OUTPUT/$AEGISLM_EVAL_ROLE-summary.json" \
+        --report-html "$AEGISLM_EVAL_OUTPUT/$AEGISLM_EVAL_ROLE.html" --wandb
+    done
+    python scripts/compare_source_runs.py \
+      --base-summary "$AEGISLM_EVAL_OUTPUT/base-summary.json" \
+      --adapter-summary "$AEGISLM_EVAL_OUTPUT/adapter-summary.json" \
+      --output "$AEGISLM_EVAL_OUTPUT/comparison.json" --wandb
+  done
+)
+```
+
+### 코드 인계 검증
+
+작성 시 수행 범위는 Ruff lint·format, mypy, Python 구문 컴파일, 설정 JSON 문법
+검사다. 추가한 CPU/mock 회귀 테스트는 실행하지 않았다. 사용자가 테스트도 확인하려면
+전용 환경에서 `python -m pytest tests/`를 별도로 실행한다. 새 recipe의 실제 학습,
+GPU runtime, 저장·재로딩 및 성능 비교 결과는 사용자의 실행 후 기록한다.

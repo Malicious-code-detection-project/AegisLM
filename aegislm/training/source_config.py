@@ -32,7 +32,12 @@ SOURCE_TRAINING_CONFIG_SCHEMA: dict[str, Any] = {
     "properties": {
         "recipe": {
             "type": "string",
-            "enum": ["legacy_unsloth", "unsloth_v2", "peft_split_control"],
+            "enum": [
+                "legacy_unsloth",
+                "unsloth_v2",
+                "peft_split_control",
+                "unsloth_fresh_v1",
+            ],
         },
         "protocol": {
             "type": "object",
@@ -93,6 +98,11 @@ SOURCE_TRAINING_CONFIG_SCHEMA: dict[str, Any] = {
                 },
                 "validation_path": {"type": "string", "minLength": 1},
                 "validation_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                },
+                "challenge_path": {"type": "string", "minLength": 1},
+                "challenge_sha256": {
                     "type": "string",
                     "pattern": "^[0-9a-f]{64}$",
                 },
@@ -339,7 +349,7 @@ def reserve_training_stage(
     """Reserve a fresh stage or validate an explicitly resumed incomplete stage."""
     if not re.fullmatch(r"[0-9a-f]{64}", config_sha256):
         raise ValueError("training reservation requires a config SHA-256")
-    if stage not in {"canary", "full"}:
+    if stage not in {"smoke", "canary", "full"}:
         raise ValueError("training reservation has an invalid stage")
     validate_no_symlink_components(adapter_stage, description="adapter stage")
     validate_no_symlink_components(checkpoint_stage, description="checkpoint stage")
