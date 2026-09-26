@@ -944,13 +944,13 @@ Trainer Dataset 생성에 사용하는 동일한 토큰화 결과에서 만든�
 - `decoded_supervised_labels` : -100을 제외한 정답 토큰
 - `masked_token_count`, `supervised_token_count` : 각 구간의 토큰 수
 
-이 기록은 data collator 처리 전이다. 실제 배치 패딩, 매 optimizer 
+이 기록은 data collator 처리 전이다. 실제 배치 패딩, 매 optimizer
 step의 입력 순서, logits 또는 학습 중 생성 답변을 기록한 것은 아니다.
 학습 정답과 모델이 자유 생성한 답변을 혼동하지 않는다.
 
 학습 trace는 adapter stage 내부가 아닌 adapter root에 저장한다.
 실행 시도마다 UUID가 다른 파일을 만들며, 체크포인트 재개 시에도
-이전 파일을 덮어쓰지 않는다. 완료된 학습 manifest의 
+이전 파일을 덮어쓰지 않는다. 완료된 학습 manifest의
 `training_trace`에 경로, SHA-256, 레코드 수와
 `capture_point="before_data_collator"`를 기록한다.
 학습 완료 전에 중단되면 trace만 남고 manifest는 없을 수 있다.
@@ -973,7 +973,7 @@ extracted_final → parsed_output → validation_errors 순서로 확인한다.
 모든 원문 진단 파일은 Git 제외 로컬 artifact로 보관한다.
 W&B에는 프롬프트, 소스 코드, 정답, 생성 원문을 업로드하지 않는다.
 새 기록 필드는 기존 gate의 평가 기준이나 승격 조건을 바꾸지 않는다.
-기존 실행의 artifact에는 이 필드들이 없을 수 있다. 
+기존 실행의 artifact에는 이 필드들이 없을 수 있다.
 
 ### 출력과 실패·재개
 
@@ -985,6 +985,7 @@ W&B에는 프롬프트, 소스 코드, 정답, 생성 원문을 업로드하지 
 | 같은 stage의 `post_training_gate_predictions.jsonl` | 평가 입력·생성 토큰·원문 출력·추출 final·파싱 결과·검증 오류 |
 | 같은 stage의 `post_training_gate.json` | 재로딩·엄격 검증 결과 |
 | `checkpoints/source-v2-unsloth-fresh-v1/<stage>/checkpoint-N/` | 재개용 checkpoint |
+| 완료 checkpoint의 `aegislm-training-evidence.json` | config·데이터·tokenizer 계약, gradient·가중치 변경 검증, adapter·Trainer 상태 해시 |
 | adapter root의 `<stage>.wandb.json` | 외부 기록 완료·재시도 상태 |
 | adapter root의 `<stage>.training-trace-<uuid>.jsonl` | 선택된 학습 데이터의 메시지·토큰·labels·마스킹 진단 |
 
@@ -1000,6 +1001,31 @@ W&B에는 프롬프트, 소스 코드, 정답, 생성 원문을 업로드하지 
 python scripts/train_source_unsloth_fresh.py --stage canary \
   --resume-from-checkpoint checkpoints/source-v2-unsloth-fresh-v1/canary/checkpoint-25
 ```
+
+`global_step < max_steps`인 checkpoint는 기존 Trainer 재개 경로를 사용한다.
+`global_step == max_steps`이면 추가 학습 대신 최종 저장·재로딩·gate로 복구한다.
+이때 예약 검증에 더해, 마지막 checkpoint 저장 callback이 남긴
+`aegislm-training-evidence.json`이 반드시 있어야 한다. config·stage·학습 데이터,
+adapter/config 파일 및 Trainer 상태 해시, 유한한 step별 loss 기록,
+gradient 검증과 가중치 변화 근거를 확인한다. 실제 runtime의 총 step 수와
+tokenizer 계약도 일치해야 하며, 복원한 trainable 가중치의 해시를 다시 대조한다.
+완료 checkpoint 복구에서는 `Trainer.train()`을 호출하지 않는다.
+
+복구 manifest는 `resume_mode="finalize_completed_checkpoint"`,
+`gradient_verification_source="checkpoint_evidence"`로 이전 실행의 검증 근거를
+사용했음을 명시한다. `training_loss_source="checkpoint_log_history_mean"`은
+저장된 step별 loss의 평균이며, 새 학습의 loss나 validation loss가 아니다.
+시간·VRAM은 이번 복구 호출의 측정값이지 원래 학습 전체의 측정값이 아니다.
+
+검증 근거 파일이 없는 기존 완료 checkpoint는 자동 복구하지 않는다.
+이 경우 이전의 미완료 checkpoint에서 명시적으로 재개하거나 새 실험 경로를
+사용한다. 근거 파일을 손으로 작성하거나 성공 검사를 생략해서 우회하지 않는다.
+checkpoint 파일은 있지만 근거 파일 저장 전에 중단된 경우에도 같은 제한이 적용된다.
+더 최신 checkpoint에 완료 검증 근거 파일이 있으면 이전 checkpoint부터의 재학습은
+거부한다. Trainer가 최신 checkpoint와 근거를 덮어쓰지 않도록, 완료 checkpoint를
+복구하거나 새로운 실험 경로를 사용한다. 손상된 근거 파일도 임의로 덮어쓰지 않는다.
+이번 복구 변경의 CPU/mock 회귀 테스트 결과는 아래 코드 인계 검증에 기록한다.
+실제 GPU에서의 완료 checkpoint 복구는 아직 실행하지 않았다.
 
 완성되거나 일부 저장된 `final/`, manifest 또는 gate가 있는 stage는 학습 resume
 대상이 아니다. 삭제해서 재사용하지 않는다. 재로딩 중단으로 **gate와 prediction이
@@ -1073,7 +1099,68 @@ full이 성공한 뒤 아래 명령을 별도로 실행한다. 주 평가 500건
 
 ### 코드 인계 검증
 
-작성 시 수행 범위는 Ruff lint·format, mypy, Python 구문 컴파일, 설정 JSON 문법
-검사다. 추가한 CPU/mock 회귀 테스트는 실행하지 않았다. 사용자가 테스트도 확인하려면
-전용 환경에서 `python -m pytest tests/`를 별도로 실행한다. 새 recipe의 실제 학습,
-GPU runtime, 저장·재로딩 및 성능 비교 결과는 사용자의 실행 후 기록한다.
+초기 작성 시에는 Ruff lint·format, mypy, Python 구문 컴파일, 설정 JSON 문법만
+검사했다. 2026-09-26에는 사용자 요청에 따라 CPU/mock 회귀 테스트를 실제 실행했다.
+검증 대상은 `f7151fb`에 main.py 기본 실행 복구 및 완료 checkpoint 복구의 로컬
+수정분을 더한 작업 트리이며, 테스트 당시 이 수정분은 아직 커밋하지 않은 상태다.
+환경은 루트 `.venv`의 Python 3.12.13, pytest 9.1.0이다.
+
+| 검사 범위 | 결과 |
+| --- | --- |
+| `test_main`, `test_completed_checkpoint`, `test_fresh_training`, `test_source_gate` | 74 passed, 1.23초 |
+| 위 4개를 포함한 아래 14개 관련 회귀 테스트 파일 | 300 passed, 1.85초 |
+
+74개는 300개에 포함된다. 저장소 전체 `tests/`를 실행한 결과는 아니다.
+모델·tokenizer 실제 로드, GPU 학습·추론, 실제 W&B 접속은 수행하지 않았다.
+GPU를 숨기고 Hugging Face를 오프라인으로 설정했으며 pytest 외부 플러그인
+자동 로딩을 비활성화했다. 모델·외부 서비스 관련 동작은 모의 객체로 검증했다.
+
+```bash
+env CUDA_VISIBLE_DEVICES= HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  WANDB_MODE=disabled PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+  .venv/bin/python -m pytest \
+  tests/test_main.py \
+  tests/test_completed_checkpoint.py \
+  tests/test_fresh_training.py \
+  tests/test_source_gate.py \
+  tests/test_source_training.py \
+  tests/test_source_training_config.py \
+  tests/test_source_checkpoint_gate.py \
+  tests/test_source_peft_control.py \
+  tests/test_source_inference.py \
+  tests/test_source_evaluation.py \
+  tests/test_artifacts.py \
+  tests/test_tracking_receipt.py \
+  tests/test_wandb_tracking.py \
+  tests/test_diagnose_source_canary.py -q
+```
+
+이번 실행에서 실패한 테스트는 없었다. 이는 모의 입력에 대한 기록·검증·복구
+경로의 회귀 검증이며, 이전 smoke의 출력 품질 문제가 해결됐다는 근거는 아니다.
+기존 `adapters/source-v2-unsloth-fresh-v1/smoke/post_training_gate_predictions.jsonl`을
+읽기 전용으로 재확인한 결과, 8건 중 파싱 가능한 객체는 7건이며 그 7건 모두
+`assessment_basis`가 객체로 출력되고 지정 CWE 불일치 오류가 기록돼 있었다.
+이 artifact에는 새 `input` 및 `extracted_final` 필드가 한 건도 없어 실제 모델
+입력부터 파싱까지의 전체 경로를 당시 결과만으로 재구성할 수 없다.
+다음 GPU 진단은 기존 결과를 보존하는 새 실험 경로에서 입력·출력 기록을 포함해
+사용자가 실행한 뒤 분석한다. 학습 전 base 비교와 실제 runtime 복구도 미검증이다.
+
+진단용 `configs/source_v2_unsloth_trace_smoke.json`은 기존 fresh 설정에서
+`training.output_dir`와 `training.checkpoint_dir`만 `source-v2-unsloth-trace-v1`
+경로로 변경했다. 모델·데이터·학습 조건은 유지한다. 저장소 루트의 Bash에서
+아래 준비 명령이 성공한 뒤 smoke 명령을 실행한다. GPU 실행은 사용자가 담당한다.
+
+```bash
+source experiments/training-loop-debug/activate.sh
+python scripts/train_source_unsloth_fresh.py \
+  --config configs/source_v2_unsloth_trace_smoke.json --prepare-only
+python scripts/train_source_unsloth_fresh.py \
+  --config configs/source_v2_unsloth_trace_smoke.json --stage smoke
+```
+
+학습은 32건·10 optimizer step, 평가는 8건이다. 학습 trace는
+`adapters/source-v2-unsloth-trace-v1/smoke.training-trace-<uuid>.jsonl`,
+평가 입력·출력은 같은 root의 `smoke/post_training_gate_predictions.jsonl`에
+남는다. `smoke/post_training_gate.json`의 품질 결과도 함께 확인한다.
+동일 경로를 다시 쓰려고 기존 결과를 삭제하지 않는다. 재실험은 설정의 두 저장
+경로를 모두 새 경로로 변경하고, 중단 복구는 위의 재개 조건을 따른다.

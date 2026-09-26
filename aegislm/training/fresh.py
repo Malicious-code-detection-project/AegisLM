@@ -9,15 +9,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 import importlib
 import json
+import math
 from pathlib import Path
+import re
 from typing import Any
 
 import os
 import tempfile
 
 from aegislm.artifacts import (
+    load_bounded_json_object,
     validate_artifact_output_location,
     validate_artifact_path_plan,
+    validate_no_symlink_components,
     write_text_artifact,
 )
 
@@ -51,6 +55,8 @@ FRESH_RECIPE = "unsloth_fresh_v1"
 SMOKE_TRAIN_SIZE = 32
 SMOKE_VALIDATION_SIZE = 8
 SMOKE_STEPS = 10
+CHECKPOINT_EVIDENCE_FILE = "aegislm-training-evidence.json"
+CHECKPOINT_EVIDENCE_SCHEMA = "aegislm.fresh-checkpoint-evidence.v1"
 FRESH_TOKENIZER_FILES = (
     "tokenizer.json",
     "tokenizer_config.json",
@@ -281,6 +287,120 @@ def write_training_traces(
         os.link(temporary, path, follow_symlinks=False)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def checkpoint_logged_loss(state: dict[str, Any]) -> float:
+    """Compute an explicitly labelled mean from complete per-step checkpoint logs."""
+    step = state.get("global_step")
+    history = state.get("log_history")
+    if type(step) is not int or step <= 0 or not isinstance(history, list):
+        raise ValueError("checkpoint requires positive global_step and log_history")
+    losses: dict[int, float] = {}
+    for row in history:
+        if not isinstance(row, dict):
+            raise ValueError("invalid checkpoint log entry")
+        for key in ("loss", "grad_norm"):
+            if key in row and (
+                type(row[key]) not in (int, float) or not math.isfinite(row[key])
+            ):
+                raise ValueError(f"checkpoint contains non-finite or invalid {key}")
+        if "loss" in row:
+            logged_step = row.get("step")
+            if (
+                type(logged_step) is not int
+                or not 1 <= logged_step <= step
+                or logged_step in losses
+            ):
+                raise ValueError("checkpoint loss steps must be unique and in range")
+            losses[logged_step] = float(row["loss"])
+    if len(losses) != step:
+        raise ValueError("checkpoint must retain one finite loss for every step")
+    return math.fsum(losses.values()) / step
+
+
+def load_completed_checkpoint(
+    checkpoint: Path | None,
+    *,
+    config: dict[str, Any],
+    stage: str,
+    train_records_digest: str,
+) -> dict[str, Any] | None:
+    """Accept terminal recovery only with digest-bound, saved training evidence.
+
+    Ordinary incomplete checkpoints retain the normal Trainer resume path.
+    Legacy terminal checkpoints have no such evidence and fail closed.
+    """
+    if checkpoint is None:
+        return None
+    state, state_digest = load_bounded_json_object(
+        checkpoint / "trainer_state.json", description="checkpoint trainer state"
+    )
+    step, maximum = state.get("global_step"), state.get("max_steps")
+    if (
+        type(step) is not int
+        or type(maximum) is not int
+        or not 0 <= step <= maximum
+        or maximum <= 0
+        or checkpoint.name != f"checkpoint-{step}"
+    ):
+        raise ValueError("checkpoint step/name/max_steps do not agree")
+    if step < maximum:
+        # Trainer may overwrite newer checkpoint-N directories when replaying
+        # an older checkpoint. Preserve completed, evidence-bound snapshots.
+        for saved in checkpoint.parent.glob(f"checkpoint-*/{CHECKPOINT_EVIDENCE_FILE}"):
+            match = re.fullmatch(r"checkpoint-([1-9][0-9]*)", saved.parent.name)
+            if match is not None and int(match.group(1)) > step:
+                raise ValueError(
+                    "a newer completed checkpoint has saved evidence; finalize it "
+                    "or use a new experiment path instead of overwriting it"
+                )
+        return None
+    evidence_path = checkpoint / CHECKPOINT_EVIDENCE_FILE
+    if not evidence_path.exists():
+        raise ValueError(
+            "completed checkpoint lacks saved training evidence; resume an earlier "
+            "incomplete checkpoint or use a new experiment path, not a bypass"
+        )
+    evidence, evidence_digest = load_bounded_json_object(
+        evidence_path, description="completed checkpoint evidence"
+    )
+    expected = {
+        "schema_version": CHECKPOINT_EVIDENCE_SCHEMA,
+        "config_sha256": source_training_config_sha256(config),
+        "stage": stage,
+        "train_records_sha256": train_records_digest,
+        "trainer_state_sha256": state_digest,
+        "global_step": step,
+        "max_steps": maximum,
+        "gradients_checked": True,
+    }
+    if any(evidence.get(key) != value for key, value in expected.items()):
+        raise ValueError("completed checkpoint evidence does not match this run")
+    if evidence.get("gradients_checked") is not True:
+        raise ValueError("completed checkpoint has no verified gradient evidence")
+    for key in (
+        "trainable_before_sha256",
+        "trainable_after_sha256",
+        "tokenizer_contract_sha256",
+    ):
+        value = evidence.get(key)
+        if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError(f"invalid checkpoint {key}")
+    if evidence["trainable_before_sha256"] == evidence["trainable_after_sha256"]:
+        raise ValueError("completed checkpoint has no verified adapter update")
+    for filename, key in (
+        ("adapter_model.safetensors", "adapter_sha256"),
+        ("adapter_config.json", "adapter_config_sha256"),
+    ):
+        path = checkpoint / filename
+        validate_no_symlink_components(path, description="checkpoint adapter")
+        if not path.is_file() or file_sha256(path) != evidence.get(key):
+            raise ValueError(f"completed checkpoint {filename} digest mismatch")
+    return {
+        **evidence,
+        "evidence_sha256": evidence_digest,
+        "training_loss": checkpoint_logged_loss(state),
+    }
 
 
 def resolve_fresh_tokenizer_snapshot(config: dict[str, Any]) -> Path:

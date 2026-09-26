@@ -27,12 +27,16 @@ if str(REPO_ROOT) not in sys.path:
 
 from aegislm.datasets.source import records_sha256  # noqa: E402
 from aegislm.training.fresh import (  # noqa: E402
+    CHECKPOINT_EVIDENCE_FILE,
+    CHECKPOINT_EVIDENCE_SCHEMA,
     FRESH_RECIPE,
     SMOKE_STEPS,
     FreshData,
+    checkpoint_logged_loss,
     fresh_stage_exit_code,
     load_fresh_config,
     load_fresh_data,
+    load_completed_checkpoint,
     prepare_fresh_tokens,
     reload_fresh_stage,
     resolve_fresh_tokenizer_snapshot,
@@ -110,7 +114,12 @@ def trainable_fingerprint(model: Any, torch: Any) -> str:
     return digest.hexdigest()
 
 
-def make_training_callback(transformers: Any, torch: Any, run: Any) -> Any:
+def make_training_callback(
+    transformers: Any,
+    torch: Any,
+    run: Any,
+    checkpoint_context: dict[str, Any] | None = None,
+) -> Any:
     """Check real gradients and forward only approved scalar logs to W&B."""
     from aegislm.tracking import log_wandb_payload, safe_training_log_payload
 
@@ -161,6 +170,57 @@ def make_training_callback(transformers: Any, torch: Any, run: Any) -> Any:
                 if payload:
                     log_wandb_payload(run, payload, step=int(state.global_step))
 
+        def on_save(
+            self, args: Any, state: Any, control: Any, model: Any, **kwargs: Any
+        ) -> None:
+            if (
+                checkpoint_context is None
+                or not state.is_world_process_zero
+                or state.global_step != state.max_steps
+            ):
+                return
+            from aegislm.artifacts import load_bounded_json_object
+
+            after = trainable_fingerprint(model, torch)
+            if (
+                not self.losses
+                or not self.gradients_checked
+                or self.initial_fingerprint is None
+                or self.initial_fingerprint == after
+            ):
+                raise RuntimeError(
+                    "completed checkpoint has no verified adapter update"
+                )
+            checkpoint = Path(args.output_dir) / f"checkpoint-{state.global_step}"
+            saved_state, state_digest = load_bounded_json_object(
+                checkpoint / "trainer_state.json", description="saved checkpoint state"
+            )
+            if (
+                saved_state.get("global_step") != state.global_step
+                or saved_state.get("max_steps") != state.max_steps
+            ):
+                raise RuntimeError("saved checkpoint step does not match Trainer state")
+            checkpoint_logged_loss(saved_state)
+            write_fresh_json(
+                checkpoint / CHECKPOINT_EVIDENCE_FILE,
+                {
+                    **checkpoint_context,
+                    "schema_version": CHECKPOINT_EVIDENCE_SCHEMA,
+                    "global_step": state.global_step,
+                    "max_steps": state.max_steps,
+                    "gradients_checked": True,
+                    "trainable_before_sha256": self.initial_fingerprint,
+                    "trainable_after_sha256": after,
+                    "trainer_state_sha256": state_digest,
+                    "adapter_sha256": file_sha256(
+                        checkpoint / "adapter_model.safetensors"
+                    ),
+                    "adapter_config_sha256": file_sha256(
+                        checkpoint / "adapter_config.json"
+                    ),
+                },
+            )
+
     return TrainingChecks()
 
 
@@ -168,6 +228,13 @@ def train_stage(
     config: dict[str, Any], data: FreshData, args: argparse.Namespace, run: Any
 ) -> None:
     """Load, tokenize, train, save; the caller then starts a fresh reload process."""
+    selected, gate_records = select_fresh_stage(data, args.stage)
+    completed = load_completed_checkpoint(
+        args.resume_from_checkpoint,
+        config=config,
+        stage=args.stage,
+        train_records_digest=records_sha256(selected),
+    )
     tokenizer_snapshot = resolve_fresh_tokenizer_snapshot(config)
     # Unsloth must patch the runtime before any direct torch/Transformers import.
     unsloth = importlib.import_module("unsloth")
@@ -206,15 +273,10 @@ def train_stage(
     train_tokens = tokenize_fresh_records(data.train, tokenizer, config)
     validation_tokens = tokenize_fresh_records(data.validation, tokenizer, config)
     del validation_tokens
-    selected, gate_records = select_fresh_stage(data, args.stage)
     indexed = {
         record.record_id: row
         for record, row in zip(data.train, train_tokens, strict=True)
     }
-    # dataset = datasets.Dataset.from_list(
-    #     [indexed[record.record_id] for record in selected]
-    # )
-    # del indexed, train_tokens
     selected_features = [indexed[record.record_id] for record in selected]
 
     trace_path = output.parent / (f"{args.stage}.training-trace-{uuid4().hex}.jsonl")
@@ -247,7 +309,17 @@ def train_stage(
     )
     for peft_config in model.peft_config.values():
         peft_config.revision = model_config["revision"]
-    checks = make_training_callback(transformers, torch, run)
+    checks = make_training_callback(
+        transformers,
+        torch,
+        run,
+        {
+            "config_sha256": source_training_config_sha256(config),
+            "stage": args.stage,
+            "train_records_sha256": records_sha256(selected),
+            "tokenizer_contract_sha256": tokenizer_digest,
+        },
+    )
     trainer = transformers.Trainer(
         model=model,
         processing_class=tokenizer,
@@ -286,18 +358,36 @@ def train_stage(
     )
     torch.cuda.reset_peak_memory_stats()
     started = time.monotonic()
-    result = trainer.train(
-        resume_from_checkpoint=(
-            str(args.resume_from_checkpoint) if args.resume_from_checkpoint else None
+    if completed is not None:
+        # Do not call train(): a terminal smoke checkpoint may otherwise take an
+        # extra optimizer step when max_steps ends partway through an epoch.
+        recover_completed_checkpoint(
+            trainer,
+            model,
+            checks,
+            torch,
+            transformers,
+            args.resume_from_checkpoint,
+            completed,
+            tokenizer_digest,
         )
-    )
+        training_loss = float(completed["training_loss"])
+    else:
+        result = trainer.train(
+            resume_from_checkpoint=(
+                str(args.resume_from_checkpoint)
+                if args.resume_from_checkpoint
+                else None
+            )
+        )
+        training_loss = float(result.training_loss)
     elapsed = time.monotonic() - started
     final_fingerprint = trainable_fingerprint(model, torch)
     if (
         not checks.losses
         or not checks.gradients_checked
         or checks.initial_fingerprint == final_fingerprint
-        or not math.isfinite(float(result.training_loss))
+        or not math.isfinite(training_loss)
     ):
         raise RuntimeError(
             "training did not produce finite loss and a verified adapter update"
@@ -334,7 +424,23 @@ def train_stage(
         "trainable_before_sha256": checks.initial_fingerprint,
         "trainable_after_sha256": final_fingerprint,
         "gradients_checked": checks.gradients_checked,
-        "training_loss": float(result.training_loss),
+        "training_loss": training_loss,
+        "training_loss_source": (
+            "checkpoint_log_history_mean" if completed else "trainer_result"
+        ),
+        "resume_mode": (
+            "finalize_completed_checkpoint"
+            if completed
+            else "continue_training"
+            if args.resume_from_checkpoint
+            else "new_training"
+        ),
+        "gradient_verification_source": "checkpoint_evidence"
+        if completed
+        else "current_run",
+        "checkpoint_evidence_sha256": completed["evidence_sha256"]
+        if completed
+        else None,
         "elapsed_seconds": elapsed,
         "peak_vram_gb": torch.cuda.max_memory_allocated() / 1024**3,
         "adapter_artifact_sha256": artifact_directory_sha256(final),
@@ -379,6 +485,44 @@ def train_stage(
     del trainer, model, dataset
     gc.collect()
     torch.cuda.empty_cache()
+
+
+def recover_completed_checkpoint(
+    trainer: Any,
+    model: Any,
+    checks: Any,
+    torch: Any,
+    transformers: Any,
+    checkpoint: Path,
+    evidence: dict[str, Any],
+    tokenizer_digest: str,
+) -> None:
+    """Restore a verified terminal adapter without another optimizer step."""
+    expected_steps = trainer.set_initial_training_values(
+        trainer.args, trainer.get_train_dataloader()
+    )[-1]
+    if expected_steps != evidence["max_steps"]:
+        raise ValueError(
+            "completed checkpoint does not match the current training schedule"
+        )
+    if tokenizer_digest != evidence["tokenizer_contract_sha256"]:
+        raise ValueError("completed checkpoint tokenizer contract mismatch")
+    if list(model.peft_config) != ["default"]:
+        raise ValueError("completed checkpoint recovery requires the default adapter")
+    peft = importlib.import_module("peft")
+    weights = peft.load_peft_weights(
+        str(checkpoint), device="cpu", local_files_only=True
+    )
+    peft.set_peft_model_state_dict(model, weights, adapter_name="default")
+    if trainable_fingerprint(model, torch) != evidence["trainable_after_sha256"]:
+        raise ValueError("restored checkpoint trainable weights do not match evidence")
+    trainer.state = transformers.TrainerState.load_from_json(
+        str(checkpoint / "trainer_state.json")
+    )
+    checks.initial_fingerprint = evidence["trainable_before_sha256"]
+    checks.gradients_checked = True
+    checks.losses = [evidence["training_loss"]]
+    print(f"[RECOVERY] Finalizing completed checkpoint without training: {checkpoint}")
 
 
 def run_training(

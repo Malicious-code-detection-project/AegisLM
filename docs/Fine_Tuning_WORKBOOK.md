@@ -44,6 +44,18 @@ LoRA에서는 주로 추가한 작은 adapter 파라미터를 학습하고 base 
 
 ### 실제 데이터 구조
 
+`python main.py`는 로컬 데이터나 모델 없이 프로젝트 안내만 출력합니다.
+기존 데이터 한 건 확인 실습은 명시적으로 다음 옵션을 사용합니다.
+
+```bash
+python main.py --inspect-training-example \
+  --dataset data/processed/phase-f-source-v5-r1/train.jsonl
+```
+
+토큰화까지 확인하려면 `--tokenizer`에 실제 존재하는 로컬 tokenizer 디렉터리를
+추가합니다. 이 옵션을 생략하면 Transformers나 tokenizer를 로드하지 않습니다.
+이 실습은 학습 또는 모델 추론을 실행하지 않으며 tokenizer도 다운로드하지 않습니다.
+
 현재 파일을 확인했습니다.
 
 파일                레코드 수    역할
