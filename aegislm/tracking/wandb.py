@@ -35,6 +35,7 @@ SOURCE_TRAINING_RECIPES = {
     "legacy_unsloth",
     "unsloth_v2",
     "peft_split_control",
+    "unsloth_fresh_v1",
 }
 SOURCE_REASONING_EFFORTS = {"low", "medium", "high"}
 SOURCE_TRAIN_SELECTION_STRATEGIES = {
@@ -360,7 +361,7 @@ def source_training_wandb_config(
     """Project a source-v2 training config through strict semantic domains."""
     if type(gate_only) is not bool:
         raise ValueError("source-v2 gate_only must be boolean")
-    safe_stage = _choice(stage, "stage", {"canary", "full"})
+    safe_stage = _choice(stage, "stage", {"smoke", "canary", "full"})
     model = _mapping(config.get("model"), "training model")
     dataset = _mapping(config.get("dataset"), "training dataset")
     training = _mapping(config.get("training"), "training parameters")
@@ -370,6 +371,8 @@ def source_training_wandb_config(
         "recipe",
         SOURCE_TRAINING_RECIPES,
     )
+    if safe_stage == "smoke" and recipe != "unsloth_fresh_v1":
+        raise ValueError("smoke tracking requires the fresh Unsloth recipe")
     raw_protocol = config.get("protocol")
     if raw_protocol is None:
         if recipe != "legacy_unsloth":

@@ -213,7 +213,11 @@ def run_source_schema_gate(
                     generation_kwargs["eos_token_id"] = list(contract.eos_token_ids)
                 output_ids = model.generate(**generation_kwargs)
                 prompt_width = inputs["input_ids"].shape[1]
-                for record, sequence in zip(batch_records, output_ids, strict=True):
+                for batch_idx, (record, sequence) in enumerate(
+                    zip(batch_records, output_ids, strict=True)
+                ):
+                    prompt_token_ids = inputs["input_ids"][batch_idx].tolist()
+                    prompt_attention_mask = inputs["attention_mask"][batch_idx].tolist()
                     generated = sequence[prompt_width:].tolist()
                     trimmed = trim_generated_token_ids(
                         generated,
@@ -231,7 +235,18 @@ def run_source_schema_gate(
                     finish_reasons[trimmed.finish_reason] += 1
                     artifact: dict[str, Any] = {
                         "id": record.record_id,
+                        "input": {
+                            "messages": list(record.prompt_messages),
+                            "target_cwe": record.target_cwe,
+                            "input_ids": prompt_token_ids,
+                            "attention_mask": prompt_attention_mask,
+                            "decoded_input": tokenizer.decode(
+                                prompt_token_ids,
+                                skip_special_tokens=False,
+                            ),
+                        },
                         "raw_generation": raw,
+                        "extracted_final": None,
                         "parsed_output": None,
                         "validation_errors": [],
                         "generation": {
@@ -252,6 +267,7 @@ def run_source_schema_gate(
                         errors.append("generation did not finish with configured EOS")
                     try:
                         final = extract_harmony_final(raw, fallback=clean)
+                        artifact["extracted_final"] = final
                         output = parse_model_output(final)
                         parsed += 1
                         validation = validate_source_assessment(
