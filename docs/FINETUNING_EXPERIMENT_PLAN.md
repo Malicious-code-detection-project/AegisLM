@@ -1624,7 +1624,8 @@ tokenizers0.22.2다. 모든 버전·설정·소스·GPU·tokenizer 자산 hash�
 ### 2026-10-03: v5 base 평가 및 본 학습 실행
 
 사용자가 커밋·푸시 → base 평가 → 본 학습 및 기록을 명시적으로 요청했다.
-현재 상태는 진행 중이다. GPU는 RTX A6000 1장이고 고정 설정과 v5 분할은
+현재 실행은 완료했다. 아래는 실행에 사용한 순서와 조건이다.
+GPU는 RTX A6000 1장이고 고정 설정과 v5 분할은
 앞 절의 계약을 그대로 사용한다. 먼저 기존 변경을 실험 브랜치
 `experiment/training-loop-debug`에 커밋·푸시한 뒤 아래 두 명령을 순차 실행한다.
 
@@ -1646,6 +1647,60 @@ base 평가는 validation에서 고정한 development100이고 test500을 열지
 최종 검사 로그는 `/tmp/aegislm-cc-training-tester-20261003/`에 기록한다.
 실행 로그는 `outputs/cc-decision-20261002-v7/baseline.log`, `train.log`,
 단계별 보고서는 같은 폴더의 `baseline/`과 `decision/`에 보관한다.
-현재 이 절은 실행 계획·허가 기록이고 완료·품질 성공을 뜻하지 않는다.
-실제 commit SHA, base 지표, 완료 step, W&B run, 시간·VRAM·adapter digest와
-제한사항은 실행 후 이어 기록한다.
+아래 완료 기록은 실제 실행 결과에 근거한다. 본 학습 완료와 품질 성공을
+구분하며 test500 비교·근거 학습·production 승격은 이번에 실행하지 않았다.
+
+
+#### 완료 결과와 검증 근거
+
+- 커밋·푸시: 하네스 `68b682d`, 학습 코드·설정·데이터 계보·실행 문서
+  `975366a`를 `origin/experiment/training-loop-debug`에 먼저 푸시했다.
+  base와 본 학습은 `975366a`의 소스에서 실행했다. prepare의 Git HEAD
+  `6845515`는 커밋 전 기록이고, source60/config hash는 실행 시 그대로였다.
+- tester 제출 전 검사: pytest509, Ruff check/format, mypy69 source files,
+  diff whitespace 검사 모두 통과. 모델·추론 설정은 `gpt-6-luna`/`xhigh`로
+  요청해 도구 호출이 수락됐지만 tester 자체 런타임에서는 실제 engine 설정을
+  확인할 수 없었다. source/config를 수정하지 않은 verify-only 작업이었다.
+- base: validation의 고정 development100을 모두 생성했다. unique ID100,
+  manifest/report/JSONL의 ID 일치, missing/extra0을 확인했다.
+  parse/schema pass0%, abstention100%, precision/recall0이었다.
+  p50/p95 latency는 14,019.711/14,989.8829ms, 생성 latency 합계 약1,414.6초다.
+  100건 모두 생성128 tokens=한도128, analysis marker 있음, final marker·
+  terminal EOS·추출된 판단 JSON 없음이었다. 이는 해당 생성 예산의 출력 실패다.
+  이 결과만으로 모델의 취약점 판단 능력 자체가 0이라고 해석하지 않는다.
+  학습 조건은 변경하지 않았으며 품질 비교 시 생성 예산 제약을 따로 검토해야 한다.
+- 본 학습: train10000 풀만 전달, batch1/accumulation32, max_steps100,
+  Trainer epoch0.32. 3,200 presentations이고 전체10000 1 epoch가 아니다.
+  첫 gradient 실제 확인과 100개 finite loss/gradient norm 로그를 확인했다.
+  LoRA 가중치 fingerprint가 실제 변경됐다. 평균 training loss
+  **0.20977129628881813**, 마지막 step loss **0.02821057289838791**.
+  학습·최종 저장 manifest 기준 시간은 **4,411.0657초(약73분31초)**다.
+- 저장: `checkpoints/cc-decision-20261002-v7/decision/checkpoint-{10,25,50,100}`,
+  최종 `adapters/cc-decision-20261002-v7/decision/final`. 최종 adapter digest는
+  `a143733f717b03f8c68d4a5ab79e6fc1a347d2d453d2a928abddd917566fde99`다.
+- 새 프로세스 재로딩: active adapter=`default`, 저장된 576개 tensor와
+  15,040,512개 parameter가 로딩 값과 정확히 일치했다. 논리값 hash는 양쪽 모두
+  `483e30f161650a710e65e31f8fc7456c724f8db3ee1652a558b293a3f1240e93`.
+  이 검사는 추가 optimizer0회이며 forward/generation 또는 품질 평가를 하지 않았다.
+- W&B: [본 학습 run t32zum0i](https://wandb.ai/erad3254-looking-for-a-job/aegislm/runs/t32zum0i).
+  실제 API 조회에서 state=`finished`, training_complete=true,
+  optimizer_steps100, loss·gradient_norm의 step1–100 원격 history100개를 확인했다.
+  평균 train_loss도 로컬 manifest와 일치했다. 학습 run은 진단 run과 별도다.
+- GPU: NVIDIA RTX A6000 1장(총49,140MiB). 10초 간격 nvidia-smi 표본에서
+  학습 시작–adapter 재로딩 완료 구간의 최대 관측 memory.used는 **17,797MiB**.
+  이는 외부 표본 최대이며 정확한 torch peak/순간 최대를 뜻하지 않는다.
+  runtime package 버전은 앞 절의 고정 manifest와 동일했다.
+
+실행 원장은 `outputs/cc-decision-20261002-v7/execution-20261003.json`이다.
+base의 `baseline/development.{json,jsonl}`, 학습의 `decision/{training,wandb}.json`
+및 `metrics.jsonl`, `wandb-completion-20261003.json`,
+`adapter-reload-20261003.{json,log}`, `gpu-samples-20261003.jsonl`과
+`baseline.log`/`train.log`를 함께 보존한다. tester 검증 로그와 aggregate audit는
+`verification-20261003/`에 복사해 임시 폴더에만 남지 않도록 했다.
+실행 중지 marker는 GPU sampler만 종료하며 학습 결과를 바꾸지 않는다.
+
+최종 실행 산출물은 Git 제외 경로이고, 결과 요약 문서만 추가 커밋·푸시한다.
+현재 완료 판정은 커밋·푸시, base 기준선 생성, 고정 본 학습 및 저장/기록에
+한정한다. test500은 optimizer/평가에 사용하지 않았으며 원천 라벨/CWE의
+미검수 상태와 evidence 미학습 상태를 유지했다. 학습 loss나 재로딩 성공을
+JSON 유효성·held-out 취약점 정확도·production 승인으로 해석하지 않는다.
