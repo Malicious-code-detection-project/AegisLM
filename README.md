@@ -1,5 +1,26 @@
 # AegisLM
 
+2026-09-28 C/C++ 원천 데이터 재구성 결과는
+`data/processed/cc-source-candidates-20260928-v5`에 보관합니다. 여섯 원천의
+1,012,598개 후보를 공통 형식으로 정리하고, 그중 판단 라벨이 있는
+10,000/1,000/500건을 분리했습니다. 최종 파일 기준 코드·CVE·커밋·함수
+그룹 및 설정된 유사도 기준의 분할 간 중복 검사를 통과했습니다.
+이는 원천 라벨 기반 후보이며, CWE 판단과 근거 줄 검수는 아직 완료되지
+않았습니다. 세부 계약과 재현 방법은 [데이터 전략](docs/DATA_STRATEGY.md)의
+C/C++ raw-source reconstruction 절을 참고합니다.
+2026-09-29 결정에 따라 이력을 보존했고, 2026-10-02 재생성 검증 후
+중간 v1–v4 정리를 완료했습니다. 정규화 풀은 별도 캐시로 이관했으며
+최종 v5의 파일과 10,000/1,000/500 구성은 그대로 유지됩니다.
+2026-10-02 v5 판단 전용 설정 연결과 실행 준비 검사를 완료했습니다.
+RTX A6000 1장에서 Unsloth 2-step 진단 학습, 실제 LoRA 갱신, adapter 저장·
+새 프로세스 값 보존 재로딩과 W&B 원격 기록을 확인했습니다.
+현재 본 실험 준비 경로는 `cc-decision-20261002-v7`이며, 100-step 본 학습과
+품질 평가는 아직 실행하지 않았습니다. 이전 batch2 수치 비교 실패는
+진단 이력으로 보존하며 원인을 확정하지 않았습니다. 현재 명령과 결과는
+[v5 판단 학습 실행 안내](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-02-v5-decision-only-execution)에 기록합니다.
+기존 83개 데이터셋 폴더의 목적·결과·계보와 보존 조건은
+[폴더 이력 및 정리 기록](docs/DATASET_ARTIFACT_INVENTORY.md)에 정리했습니다.
+
 `AegisLM`은 Project NuriLab과 연계할 수 있는 별도 LLM 모델 개발 프로젝트입니다.
 
 이 저장소는 보안 분석 시스템 자체를 구현하기보다, 보안 분석에 특화된 로컬 LLM을 학습, 평가, 개선하는 데 집중합니다. Project NuriLab이 분석 파이프라인과 운영 시스템을 담당한다면, AegisLM은 그 시스템에 연결될 수 있는 모델, 어댑터, 데이터셋, 평가 방법을 준비합니다.
@@ -62,6 +83,13 @@ source-free 집계와 125-step curve는 2026-09-11 W&B에 historical-import로
 기록됐고, 복구 카나리는 W&B run `mdotwa7l`과 `4a0wl8na`에 실패 결과로
 보존됐습니다. 자격 증명과 상세 실행법은
 `docs/FINETUNING_EXPERIMENT_PLAN.md`를 따릅니다.
+
+2026-09-27에는 사용자가 AegisLM-B200의 Qwen3 실험과 비교할 목적으로
+10,000/1,000/500 데이터 구성을 유지한 탐색적 본 학습을 승인했습니다.
+기존 canary 실패는 유지하며, 별도 설정과 명시적 실행 사유를 통해 본 학습을
+시작했습니다. 학습 완료나 품질 개선은 아직 확인하지 않았습니다. 실행 조건과
+검증 범위는 `docs/FINETUNING_EXPERIMENT_PLAN.md`의 전체 데이터 비교 실험
+기록을 따릅니다.
 
 초기 기준 모델은 `openai/gpt-oss-20b`입니다.
 
@@ -133,6 +161,8 @@ Project NuriLab 저장소 수정, 런타임 연결, 통합 검증은 Project Nur
 
 ## 문서
 
+선택형 개인 하네스는 [v4 진입점](references/이정민/index.md)에서 확인합니다.
+
 - `AGENTS.md` - 협업 운영 규칙
 - `CONTRIBUTING.md` - 기여 절차 안내
 - `docs/README.md` - 세부 문서 인덱스와 문서 관리 규칙
@@ -149,3 +179,19 @@ Project NuriLab 저장소 수정, 런타임 연결, 통합 검증은 Project Nur
 - `docs/TEST_CRITERIA.md` - Phase C 테스트 기준과 평가 레퍼런스
 
 README에는 프로젝트의 큰 방향과 현재 상태만 유지합니다. 세부 기준, 실험 계획, 기여 규칙, 테스트 기준은 `docs/` 아래 문서에 기록합니다.
+
+2026-09-28에는 B200의 성공 기준인 Q1R10 decision + Q1R11 evidence를
+GPT-OSS에서 재현하는 `source_two_stage_v1` 경로를 추가했습니다. 동결된
+판단·근거 데이터와 동일 평가 계약을 사용하며, 각각 base에서 100-step을
+학습합니다. 준비/GPU 검증 → base dev100 → decision → evidence → 최종 평가를
+순서대로 실행하고, 실패 시 다음 단계로 진행하지 않습니다. W&B 기록 확인을
+학습 시작 조건으로 사용합니다. 실행 방법과 비교 조건은
+`docs/FINETUNING_EXPERIMENT_PLAN.md`의 2026-09-28 항목을 따릅니다.
+학습 완료와 품질 통과는 별도 실행 결과로 확인해야 합니다.
+
+이 경로의 실제 준비 검증에서는 학습·검증 21,971건의 토큰 검사를
+통과했지만, B200의 `fresh-blind-500` 중 498건이 현재 train/validation과
+동일한 코드를 포함함을 확인했습니다. 준비 단계에서 차단했으며 GPU 학습과
+W&B 학습 run은 시작하지 않았습니다. 원본은 보존하고, 실제 학습·검증 코드와
+겹치지 않는 평가 세트를 먼저 확보해야 합니다. 상세 근거는 학습 계획 문서의
+`Actual preparation result: blocked by benchmark overlap` 항목에 기록했습니다.

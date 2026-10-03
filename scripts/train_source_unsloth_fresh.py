@@ -70,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--resume-from-checkpoint", type=Path)
     parser.add_argument(
+        "--exploratory-full-reason",
+        help="Explicitly authorize exploratory full training without canary promotion; "
+        "persist the reason and retain all post-training quality checks.",
+    )
+    parser.add_argument(
         "--wandb",
         action="store_true",
         help="Opt in to the existing source-free W&B tracking policy.",
@@ -91,6 +96,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("reload subprocess cannot train or use W&B")
     if args.wandb_reconcile and not args.wandb:
         parser.error("--wandb-reconcile requires --wandb")
+    if args.exploratory_full_reason is not None:
+        args.exploratory_full_reason = args.exploratory_full_reason.strip()
+        if not args.exploratory_full_reason:
+            parser.error("--exploratory-full-reason must not be blank")
+        if args.stage != "full" or args.prepare_only or args.reload_only:
+            parser.error("--exploratory-full-reason requires full training")
     return args
 
 
@@ -406,9 +417,13 @@ def train_stage(
             torch.isfinite(tensors.get_tensor(key)).all().item() for key in keys
         ):
             raise RuntimeError("saved adapter contains non-finite tensors")
+    exploratory_reason = getattr(args, "exploratory_full_reason", None)
     manifest = {
         "recipe": FRESH_RECIPE,
         "stage": args.stage,
+        "execution_mode": "exploratory_full" if exploratory_reason else "standard",
+        "exploratory_full_reason": exploratory_reason,
+        "canary_promotion_verified": args.stage == "full" and not exploratory_reason,
         "config": config,
         "config_sha256": source_training_config_sha256(config),
         "base_model_id": model_config["base_model_id"],
@@ -525,6 +540,35 @@ def recover_completed_checkpoint(
     print(f"[RECOVERY] Finalizing completed checkpoint without training: {checkpoint}")
 
 
+def record_exploratory_intent(
+    config: dict[str, Any], data: FreshData, args: argparse.Namespace
+) -> None:
+    """Preserve the full-run exception before model load, including on resume."""
+    from aegislm.artifacts import load_bounded_json_object
+
+    reason = getattr(args, "exploratory_full_reason", None)
+    if not reason:
+        return
+    path = Path(config["training"]["output_dir"]) / "full.execution-intent.json"
+    intent = {
+        "execution_mode": "exploratory_full",
+        "reason": reason,
+        "canary_promotion_verified": False,
+        "config_sha256": source_training_config_sha256(config),
+        "train_records_sha256": records_sha256(data.train),
+        "train_record_count": len(data.train),
+        "validation_record_count": len(data.validation),
+        "post_training_gate_record_count": len(data.gate),
+        "minimum_schema_pass_rate": config["canary"]["minimum_schema_pass_rate"],
+    }
+    if path.exists():
+        previous, _ = load_bounded_json_object(path, description="execution intent")
+        if not args.resume_from_checkpoint or previous != intent:
+            raise ValueError("exploratory execution intent does not match resume")
+    else:
+        write_fresh_json(path, intent)
+
+
 def run_training(
     config: dict[str, Any], data: FreshData, args: argparse.Namespace
 ) -> None:
@@ -591,6 +635,7 @@ def run_training(
                 config_sha256=config_digest,
                 stage=args.stage,
             )
+            record_exploratory_intent(config, data, args)
         if claim is not None:
             if claim.needs_logging:
                 mark_tracking_logging_started(claim)
@@ -699,7 +744,13 @@ def main(argv: list[str] | None = None) -> None:
         reload_fresh_stage(config, data, args.stage)
         return
     if args.stage == "full":
-        require_fresh_canary(config, data)
+        if args.exploratory_full_reason:
+            print(
+                "[EXPLORATORY] Full training without canary promotion: "
+                + args.exploratory_full_reason
+            )
+        else:
+            require_fresh_canary(config, data)
     from aegislm.environment import load_project_env
 
     load_project_env(REPO_ROOT)

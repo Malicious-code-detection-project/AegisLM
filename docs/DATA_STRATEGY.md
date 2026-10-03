@@ -393,3 +393,264 @@ Before any source-v2 record can enter evaluation or the W&B source-free table,
 its ID must match `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$` and `target_cwe` must
 match `^CWE-[1-9][0-9]*$`. These domains prevent source text, paths, and other
 unbounded strings from being reclassified as safe identifiers.
+
+## C/C++ raw-source reconstruction (2026-09-28)
+
+`scripts/build_cc_source_corpus.py` creates a new local candidate corpus from
+`data/raw_data`; it does not overwrite the previous Q1R10/Q1R11 datasets or
+automatically start training. Run with the locked `data-prep` dependency group:
+
+```bash
+uv run --group data-prep python scripts/build_cc_source_corpus.py \
+  --output data/processed/cc-source-candidates-20260928-v1 --seed 3407
+```
+
+The canonical JSONL unit is a function with `id`, `group_id`, `split`,
+`language`, `source_code`, `target_cwe`, `assessment`, `evidence_ranges`,
+`hashes`, `provenance`, and `annotation`. Missing CWE or labels remain null;
+multiple source CWEs remain in `annotation.cwe_candidates` rather than being
+arbitrarily assigned as positive function-level labels. Original locations and
+source IDs stay in provenance and never enter model-visible messages.
+
+- PrimeVul, DiverseVul, BigVul and Juliet source labels are retained as
+  `source_label_unreviewed`, not upgraded to verified scoped-CWE decisions.
+- BigVul after-change functions, CVEfixes methods and DecompileBench source
+  functions are retained for review without invented binary labels. CVEfixes
+  can use the hash-verified read-only SQLite cache of the earlier SQL import.
+- Assemblage is inspected for complete function source; empty `source_codes`
+  cannot supply this task. ARVO metadata, chat QA, binary features and pretrained
+  benchmark models are inventoried with explicit exclusion reasons.
+- Evidence remains null and `evidence_status=unreviewed` until independently
+  annotated. Changed lines are not treated as evidence, fixed functions are not
+  automatically negatives, and confidence is not fabricated.
+- Source comments are removed, preserving line structure. Juliet good/bad/CWE
+  identifiers are neutralized. Line annotations must reference the final stored
+  code, not the original raw-file coordinates.
+
+`pool/*.jsonl` preserves normalized candidates, including unlabeled records.
+`canonical/{train,validation,test}.jsonl` contains exactly 10,000/1,000/500
+selected provisional records, balanced between source positive and negative
+labels. `decision-candidates/` contains system/user/assistant exports for train
+and validation, plus separate test `challenge.jsonl` and `gold.jsonl`.
+`review/evidence-pending.jsonl` tracks the outstanding annotation work; there
+is no evidence SFT export until real line-level gold exists. Completion of
+conversion does not authorize training: the manifest keeps
+`approved_for_training=false` and records the unresolved semantic review.
+
+Before seed-based sampling, connect records through repository/function family,
+CVE, commit, lexical identity and identifier-normalized lexical identity.
+Conservatively merge repository basenames across providers when identifying a
+function family. Juliet uses testcase families across numbered variants.
+A group belongs to one split only. Empty stubs and functions below the selectable
+25-token minimum do not connect unrelated projects through clone hashes. Whole
+repositories are not required to be disjoint: shared code can otherwise collapse
+most projects into one component. The final lexical clone audit still applies.
+Conflicting source labels on identical lexical code are excluded. Previously
+used `phase-f-source-*` train/validation/challenge artifacts are read directly;
+components touching their lexical fingerprints are excluded from the new selection.
+The original public split names are retained in provenance but this new split is
+not presented as an official PrimeVul/BigVul/DiverseVul benchmark.
+
+Check final cross-split near clones by an exact prefix-filtered Jaccard join of
+identifier-normalized token 5-grams at similarity >= 0.8. Merge detected groups
+and resample with the same seed until none remain; do not select by model scores.
+This is a stated lexical-clone test, not proof of arbitrary semantic independence.
+Re-read final JSONL files and recompute IDs, hashes, groups, historical overlaps,
+and near-clone overlaps. Save split audit, source counts, input hashes and output
+SHA-256 inventory. Refuse an existing output directory or an insufficient pool.
+The initial 80/10/10 hash buckets are candidate supplies rather than exact output
+counts. If parsing/exclusions exhaust one supply, assign previously unused whole
+groups in deterministic seed order. A group already selected for another split
+cannot be reassigned. Preserve 50/50 labels and the exact requested output sizes;
+record reserve-group allocations in the audit. No model scores inform selection.
+
+`--reuse-pool <prior-output>` can reuse a completed normalization stage in a new
+output directory. It refuses an active SQLite journal and inconsistent pool row
+counts. Input manifests fingerprint the reused pool and index as well as original
+source files. An intermediate normalization directory without a final manifest
+is not a completed split dataset.
+
+`--exclude-ids <json-array>` records explicit exclusions, such as token-budget
+failures, in the input manifest and split audit; it accepts only IDs present in
+the selectable pool. Rebuild into a new directory after exclusion. Do not truncate
+code or edit a frozen test file in place to satisfy a context-length limit.
+
+Selected functions must parse as one C/C++ function and meet a lexical size
+limit. This is not a tokenizer budget check; model-specific tokenization and
+assistant-only loss-mask checks remain required before training.
+
+### Materialized candidate result
+
+The final current artifact is `data/processed/cc-source-candidates-20260928-v5`.
+The reusable normalization pool, originally in `cc-source-candidates-20260928-v1/pool`,
+now lives at `data/cache/cc-source-normalized-20260928/pool` after the verified
+2026-10-02 relocation. It contains 1,012,598 records from six providers. v2-v4
+were intermediate attempts and have been removed after preserving evidence.
+The v5 source distribution is:
+
+| Source | Train | Validation | Test |
+| --- | ---: | ---: | ---: |
+| PrimeVul | 3,315 | 368 | 198 |
+| DiverseVul | 3,259 | 367 | 174 |
+| BigVul | 3,281 | 260 | 128 |
+| Juliet | 145 | 5 | 0 |
+| Total | 10,000 | 1,000 | 500 |
+
+Each split has equal positive/negative source-label counts. CVEfixes and
+DecompileBench remain in the normalized pool without inferred scoped labels.
+All final split overlap metrics are zero, including the stated near-clone test
+and historical lexical fingerprints. Identical lexical code with contradictory
+source labels (3,009 hashes) was excluded from selection. Project/function, CVE
+and commit grouping are independently recomputed on the final canonical files
+by the builder (this is not an independent reviewer approval).
+
+The actual pinned Unsloth GPT-OSS tokenizer and `tokenize_source_training_record`
+formatter (`reasoning_effort=low`, frozen date 2026-09-28, empty-analysis/final)
+give maximum lengths 4,055/3,772/2,947 for train/validation/test. Every record has
+16-18 supervised tokens; none exceeds 4,096. Eleven overlength IDs were excluded
+without truncation before the final split was frozen. Token counts from the base
+tokenizer alone are not the authoritative training-format audit.
+
+Audit scripts and results are under `outputs/cc-source-candidates-20260928-v5`.
+The output SHA-256 list and canonical/messages alignment pass. Unit suite:
+450 passed; Ruff lint/format and mypy pass. Training readiness is still false:
+scoped CWE labels require semantic review, evidence gold is absent, and the
+evidence SFT export has zero records. Test CWE-93 has no training CWE-93 records;
+the split is not claimed to be stratified by every rare CWE.
+
+Exact selection replay (choose an unused output directory):
+
+```bash
+uv run --offline --frozen --group data-prep python scripts/build_cc_source_corpus.py \
+  --reuse-pool data/cache/cc-source-normalized-20260928 \
+  --exclude-ids outputs/cc-source-candidates-history-20260929/reproduction/exclude-overlength-ids.json \
+  --output outputs/cc-source-candidates-replay --seed 3407
+```
+
+### 시도 이력과 학습 전 정리 결정 (2026-09-29)
+
+사용자 결정: 시도·실패·수정 근거를 문서화하고, **학습 시작 전에 중간
+산출물을 정리한다.** 운영 학습/평가 입력은 최종 v5의 분할만 사용한다.
+아래는 당시 실제 실행 결과다. 2026-09-29에는 삭제하지 않았으며,
+2026-10-02의 이관·삭제 완료 기록은 다음 절에 추가했다.
+
+| 버전 | 시도와 관측 결과 | 다음 수정 / 재발 방지 |
+| --- | --- | --- |
+| v1 | 여섯 원천 1,012,598건 정규화 완료. 저장소 전체와 복제 코드의 연결이 지나치게 커짐. PrimeVul 중간 검사에서 약 94%가 한 연결 그룹이었고, 최종 학습 양성 공급은 388/5,000건에 그쳐 분할 실패. | 저장소 전체 대신 프로젝트 내 함수 계열·CVE·커밋·복제 코드로 연결. 25토큰 미만의 짧은 함수는 복제 지문으로 무관한 프로젝트를 연결하지 않음. 최종 분할의 복제 검사는 유지. |
+| v2 | 수정된 그룹 기준을 적용했으나 제외·구문 검사 후 검증 양성이 447/500건으로 부족. | 이미 선택한 그룹을 다른 분할로 옮기지 않고, 아직 사용하지 않은 그룹만 고정 seed 순서로 추가 배정. |
+| v3 | 10,000/1,000/500 및 중복 검사 통과. 첫 유사 코드 검사에서 한 쌍을 찾아 같은 그룹으로 합친 후 재추출. 기본 GPT-OSS tokenizer 검사에서 학습 9건·테스트 1건이 4,096토큰 초과. | 코드 잘림 대신 해당 10개 ID를 제외하고 재추출. 분할 통과와 모델별 토큰 통과를 구분. |
+| v4 | 10건 교체 후 분할 검사 통과. 실제 pinned Unsloth tokenizer와 학습 formatter를 적용하니 학습 1건이 4,108토큰으로 추가 초과. | 모델 이름만 같다고 템플릿이 같다고 가정하지 않음. 실제 학습 tokenizer revision·reasoning·empty-analysis/final 포맷으로 재검사. |
+| v5 | 누적 11개 ID 제외 후 최종 분할·export 정합성·중복·토큰 검사 통과. 최대 토큰 4,055/3,772/2,947. 모든 레코드의 supervised token 16–18개. | 최종 기준본으로 유지. 라벨 의미 검수와 근거 줄 검수는 미완료 상태 그대로 기록. |
+
+보조 검사에서 확인한 실수도 남긴다.
+
+- Transformers 5의 `apply_chat_template` 반환 객체에 `len()`을 바로 적용해
+  토큰 수 대신 키 개수 2를 셌던 결과는 **무효**다. 당시 파일명은
+  `token-audit-invalid-key-count.json`이며 성공 근거로 사용하지 않는다.
+  실제 `input_ids` 길이를 확인하고, 최종 검사는 학습 formatter의
+  `features["input_ids"]`와 `labels`를 사용했다.
+- 프로젝트의 weights cache에는 Unsloth tokenizer 파일이 완비되지 않았다.
+  base tokenizer로 대체하면 padding/템플릿 계약이 달라진다.
+  최종 검사에서는 `resolve_fresh_tokenizer_snapshot`으로 기본 HF cache에
+  있는 revision `093fba6992ef5a7152481afec0bdfca1ac486998`의 완전한 snapshot을
+  찾아 사용했다. 캐시 파일 부재를 tokenizer 변환 패키지 설치 문제로 오인하지 않는다.
+- 기본 tokenizer의 길이 검사만으로 실제 학습 formatter 통과를 주장하지 않는다.
+  코드 파싱, 분할, 토큰 길이, loss mask 검사는 의미 라벨/근거의 정확성을
+  보장하지 않는다. 현재 `approved_for_training=false`를 유지한다.
+
+#### 보존한 근거
+
+Git에 남기는 정본은 이 문서의 방법·결정·집계 결과와 빌더/테스트/의존성
+설정이다. 원본 코드와 대형 데이터는 계속 Git 밖에 둔다.
+작은 실행 근거 묶음은 `outputs/cc-source-candidates-history-20260929`에
+보관했다. 52개 파일을 복사하고 SHA-256을 대조했으며 다음을 포함한다.
+
+- v1-v5의 가용 manifest, 입력 hash 목록, 분할 검사, 제외 ID, 토큰 검사,
+  export 검사, `/tmp`에 있던 실행 로그 및 초기 v1 빌더.
+- 최종 빌더·정규화/분할 모듈·테스트·의존성 lock·학습 포맷 관련 코드 snapshot.
+- `archive-manifest.json`: 원래 경로와 보관 경로, 크기, SHA-256, 보관 한계.
+- `SHA256SUMS`: 보관 파일 검증 목록.
+
+v2-v4의 당시 코드 전체 snapshot은 남아 있지 않다. 존재하는 command/hash/
+검사/로그만 보존했으며, 완전한 과거 코드가 복원됐다고 주장하지 않는다.
+v1의 초기 빌더는 있지만 당시 companion 모듈의 별도 snapshot도 없다.
+
+#### 학습 직전 정리 순서와 범위
+
+기존 `data/processed` 83개 폴더까지 확장한 목록과 참조 의존성은
+[폴더 이력 및 정리 기록](DATASET_ARTIFACT_INVENTORY.md)에 보존한다.
+해당 문서의 정리 후보 표기는 삭제 완료나 신규 학습 승인으로 해석하지 않는다.
+
+1. **최종본 확인:** v5의 파일 수·SHA-256·분할·토큰 검사와 검수 상태를 확인한다.
+   의미 검수를 완료한 후속 release가 있다면 v5와의 변경 이력 및 split 소속을
+   먼저 고정한다. Base/adapter 비교는 동일한 최종 test 500건을 사용한다.
+2. **재생성 의존성 해소:** v5 생성 명령은 현재 v1의 `pool/`, `index.sqlite`,
+   `inventory.json`, `normalization_counts.json`과
+   `outputs/cc-source-candidates-20260928-v4/exclude-overlength-ids.json`을 참조한다.
+   제외 ID 사본은 history 묶음의 `reproduction/`에도 보존했다.
+   정규화 cache를 별도 보존 위치로 이관하거나 원본으로부터 재생성하고,
+   새 경로로 최종 선택 결과가 재현되는지 확인한 뒤 기존 의존 폴더를 정리한다.
+   재현 검증이 안 된 cache를 단순 중간 파일로 간주해 먼저 삭제하지 않는다.
+3. **과거 데이터 중복 검사 의존성 보존:** 빌더는 기존 `phase-f-source-*`의
+   실제 train/validation/challenge 파일도 읽는다. 이 파일들은 이번 정리
+   대상이 아니다. 향후 별도로 정리하려면 제외 지문과 입력 hash·추출 방법을
+   먼저 보존하고 동일한 제외 결과를 검증한다.
+4. **문서·검사 기록 유지:** history 묶음과 Git 문서를 검증한다. 이동 시에는
+   원래 경로/새 경로/hash를 별도 이관 기록에 남긴다. 기존 frozen manifest를
+   수정해 과거 경로를 지우거나 SHA-256을 다시 작성하지 않는다.
+5. **중간 산출물 정리:** 위 조건을 충족한 `cc-source-candidates` v1-v4의
+   중복/실패 데이터와 보관 완료된 임시 실행 파일을 정리한다. 활성 학습 입력으로
+   최종본 하나만 보이게 하고, 유지해야 하는 cache·history는 역할이 드러나는
+   보존 경로로 분리한다. 각 정리 대상의 원래 경로·처리 내용·시점을 기록한다.
+6. **정리 후 확인:** 최종 train/validation/test 및 challenge/gold가 여전히
+   열리고 수량·해시가 일치하는지, 실행 명령의 입력 경로가 모두 유효한지 확인한다.
+
+이번 범위에는 `raw_data`, 모델·어댑터·checkpoint, 다른 실험 결과, 기존
+Q1R10/Q1R11 원본 데이터의 일괄 삭제가 포함되지 않는다. 최종 기준 데이터와
+검사 기록도 삭제 대상이 아니다. 학습 직전 정리 완료 기록이 생기기 전에는
+문서만 갱신했다고 정리 작업이 끝났다고 표시하지 않는다.
+
+
+### 2026-10-02: 재생성 의존성 이관 및 중간 폴더 정리 완료
+
+사용자가 재개한 1단계(보존 및 정리)를 완료했다. 학습 설정 연결·커밋·푸시·GPU 학습은
+이번 단계에서 실행하지 않았다. 2026-09-29의 원래 결정과 frozen artifact는 유지한다.
+
+| 처리 대상 | 완료한 처리 | 보존/검증 근거 |
+| --- | --- | --- |
+| `data/processed/cc-source-candidates-20260928-v1` | `data/cache/cc-source-normalized-20260928`로 같은 파일시스템 내 이관 | pool 6개, index, inventory, counts 총 9개 파일 해시 일치; 약 2.39 GiB 보존 |
+| v4 검사 폴더의 `exclude-overlength-ids.json` | 현재 재현 명령은 history의 `reproduction/` 사본 사용 | 11개 ID, 원본과 사본 SHA-256 일치 |
+| `data/processed/cc-source-candidates-20260928-v2/v3/v4` 각각 | metadata·해시 보존 후 삭제 | 이관 입력으로 최종 v5를 먼저 재현 |
+| `outputs/cc-source-candidates-20260928-v3/v4` 각각 | 검사 스크립트·보고서·제외 목록 보존 후 삭제 | 새 cleanup 묶음의 `metadata-before/`와 기존 history에 보존 |
+| cleanup 작업의 임시 `replay/` | 비교 후 임시 데이터 삭제 | 실제 재생성 명령·로그·파일 해시·replay metadata·export 검사 보존 |
+| 최종 v5 | 원본 경로와 바이트 유지 | 정리 전/후 전체 파일 해시와 export 정합성 재검증 |
+
+삭제한 기존 중간 폴더는 5개(데이터 3개, 검사 2개), 파일 크기 합계는 **121.56 MiB**다.
+v1은 삭제가 아니라 이관이다. 이 값은 metadata 보존 공간을 차감한 순수 회수 용량이 아니다.
+`data/processed`의 전체 폴더 수는 83 → 79이며, 새 `cc-source-candidates-*` 폴더는
+최종 v5 하나다. 그 외 과거 source 데이터는 중복 제외 입력으로 계속 보존한다.
+
+#### 실제 재현 및 정리 후 검사
+
+- 새 캐시와 보존한 제외 목록을 사용해 seed 3407로 전체 선택·분할 과정을 재실행했다.
+- 원래 v5와 **11개 파일이 바이트 단위로 일치**했다: canonical 3개,
+  decision-candidates 4개, evidence-pending 1개, inventory/counts/split-audit 3개.
+- `input-manifest` 26,942개 항목은 캐시·제외 파일의 경로 이관을 대응시키면 크기·해시가 동일했다.
+  manifest에서 바뀐 것은 재현 command와 normalized_pool_path뿐이다.
+  재현 manifest/input-manifest/SHA256SUMS는 원래 frozen metadata와 다른 파일이며 덮어쓰지 않았다.
+- 재현 및 최종본의 export/SHA 검사는 모두 통과했다. 최종 train/validation/test는
+  10,000/1,000/500, 각 라벨 50/50이며 challenge 입력과 gold는 분리된다.
+- 기존 토큰 검사(날짜 2026-09-28, pinned Unsloth formatter)의 입력 해시는 현재 최종 파일과
+  동일하다. 이번 경로 정리는 토큰화를 다시 실행하지 않았다. 다음 단계에서 실행 날짜·formatter가
+  바뀌면 해당 조건의 토큰 검사를 다시 해야 한다.
+- 의미 라벨/근거 검수 상태와 `approved_for_training=false`는 유지한다.
+
+실제 명령은 위의 현재 재현 명령과 동일한 입력이며 output만
+`outputs/cc-source-cleanup-20261002/replay`였다. 그 임시 경로는 검사 후 삭제했다.
+현재 재현 입력은 유효하고, 원래 frozen manifest의 옛 경로는 이관 기록으로 해석한다.
+
+완료 증거는 Git 제외 `outputs/cc-source-cleanup-20261002/`에 보존했다:
+`cleanup-manifest.json`, `reproduction-audit.json`, `final-export-audit.json`,
+`replay-export-audit.json`, 실행 로그·정리 스크립트·metadata 사본·`SHA256SUMS`.
+기존 history 묶음 52개 파일의 해시도 정리 전에 확인했다.
+CVEfixes DB의 과거 검증 해시는 재현 builder가 재사용했으며 이번에 DB 전체를 다시 해시하지 않았다.

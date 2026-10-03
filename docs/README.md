@@ -6,17 +6,20 @@
 
 ## 문서 지도
 
+선택형 개인 하네스의 진입점·역할·교체 기록은 [프로필 인덱스](../references/이정민/index.md)에 있습니다.
+
 | 문서 | 역할 |
 | --- | --- |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 팀원이 작업을 시작하고 PR을 제출하기 위한 실행 가이드 |
 | [ARTIFACT_STORAGE_POLICY.md](ARTIFACT_STORAGE_POLICY.md) | fine-tuning adapter, checkpoint, model card, evaluation artifact 저장 정책 |
 | [DATASET_CANDIDATES.md](DATASET_CANDIDATES.md) | Phase D/E 이후 공개 데이터셋 후보 registry와 안전성/용도 분류 |
 | [DATA_STRATEGY.md](DATA_STRATEGY.md) | Phase C 데이터 활용 전략, 전처리, tokenization/chunking, split, RAG/vector 분리 기준 |
+| [DATASET_ARTIFACT_INVENTORY.md](DATASET_ARTIFACT_INVENTORY.md) | 기존 데이터셋 83개 폴더의 목적·결과·계보와 학습 전 정리 조건 |
 | [EVALUATION_PLAN.md](EVALUATION_PLAN.md) | Phase D/E 평가 계획, 점수화 기준, JSON/HTML 리포트 형식 |
 | [EXPERIMENT_LOG_TEMPLATE.md](EXPERIMENT_LOG_TEMPLATE.md) | baseline/adapter 평가 결과를 같은 형식으로 기록하기 위한 템플릿 |
 | [PHASE_D_EXIT_CRITERIA.md](PHASE_D_EXIT_CRITERIA.md) | Phase D 완료 조건과 Phase E tiny SFT PoC 착수 gate |
 | [PHASE_E_TEAM_ONBOARDING.html](PHASE_E_TEAM_ONBOARDING.html) | Phase E 이슈 처리와 팀 교육 주제를 한 장으로 정리한 온보딩 인포그래픽 |
-| [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md) | 파인튜닝 학습 로드맵, 실험 전략, 데이터셋 계획 |
+| [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md) | 파인튜닝 학습 로드맵, 실험 전략, 데이터셋 계획과 [v5 판단 학습 실행·Unsloth 복구 기록](FINETUNING_EXPERIMENT_PLAN.md#2026-10-02-v5-decision-only-execution) |
 | [PR_DESCRIPTION_TEMPLATE.md](PR_DESCRIPTION_TEMPLATE.md) | PR 본문 작성 템플릿과 체크리스트 |
 | [QUALITY_GATES.md](QUALITY_GATES.md) | 코드 변경 PR의 pytest, ruff, mypy 검사 기준 |
 | [TEST_CRITERIA.md](TEST_CRITERIA.md) | Phase C 테스트 기준, JSON schema 검증 기준, 평가 레퍼런스 |

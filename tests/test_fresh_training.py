@@ -443,3 +443,128 @@ def test_training_traces_cleans_up_after_partial_failure(tmp_path: Path):
 
     assert not path.exists()
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--exploratory-full-reason", "comparison"],
+        ["--stage", "canary", "--exploratory-full-reason", "comparison"],
+        ["--stage", "full", "--exploratory-full-reason", "   "],
+        [
+            "--stage",
+            "full",
+            "--prepare-only",
+            "--exploratory-full-reason",
+            "comparison",
+        ],
+        ["--stage", "full", "--reload-only", "--exploratory-full-reason", "comparison"],
+    ],
+)
+def test_exploratory_exception_requires_explicit_full_training(arguments):
+    with pytest.raises(SystemExit):
+        entrypoint.parse_args(arguments)
+
+
+def test_exploratory_full_retains_data_checks_and_skips_only_promotion(monkeypatch):
+    from aegislm import environment
+
+    config, data = _config(), _data()
+    calls = []
+    monkeypatch.chdir(entrypoint.REPO_ROOT)
+    monkeypatch.setattr(entrypoint, "load_fresh_config", lambda _: config)
+
+    def load_data(actual):
+        assert actual is config
+        calls.append("data_checked")
+        return data
+
+    monkeypatch.setattr(entrypoint, "load_fresh_data", load_data)
+    monkeypatch.setattr(environment, "load_project_env", lambda _: None)
+    monkeypatch.setattr(
+        entrypoint, "require_fresh_canary", lambda *a: pytest.fail("promotion called")
+    )
+
+    def run(actual_config, actual_data, args):
+        assert actual_config is config and actual_data is data
+        assert args.exploratory_full_reason == "dataset comparison"
+        assert config["canary"]["minimum_schema_pass_rate"] == 0.9
+        calls.append("training")
+
+    monkeypatch.setattr(entrypoint, "run_training", run)
+    argv = ["--stage", "full", "--exploratory-full-reason", "dataset comparison"]
+    entrypoint.main(argv)
+    assert calls == ["data_checked", "training"]
+
+    def reject_data(_):
+        raise ValueError("dataset mismatch")
+
+    monkeypatch.setattr(entrypoint, "load_fresh_data", reject_data)
+    with pytest.raises(ValueError, match="dataset mismatch"):
+        entrypoint.main(argv)
+    assert calls == ["data_checked", "training"]
+
+
+def test_exploratory_intent_is_persisted_and_bound_to_resume(tmp_path):
+    config, data = _config(), _data()
+    config["training"]["output_dir"] = str(tmp_path / "adapters")
+    args = entrypoint.parse_args(
+        ["--stage", "full", "--exploratory-full-reason", "dataset comparison"]
+    )
+    entrypoint.record_exploratory_intent(config, data, args)
+    path = tmp_path / "adapters/full.execution-intent.json"
+    original = path.read_bytes()
+    intent = json.loads(original)
+    assert intent["canary_promotion_verified"] is False
+    assert intent["train_record_count"] == len(data.train)
+    assert intent["validation_record_count"] == len(data.validation)
+    assert intent["minimum_schema_pass_rate"] == 0.9
+    with pytest.raises(ValueError, match="intent"):
+        entrypoint.record_exploratory_intent(config, data, args)
+    args.resume_from_checkpoint = tmp_path / "checkpoint-25"
+    entrypoint.record_exploratory_intent(config, data, args)
+    for key in ("reason", "config"):
+        if key == "reason":
+            args.exploratory_full_reason = "changed reason"
+        else:
+            args.exploratory_full_reason = "dataset comparison"
+            config["training"]["learning_rate"] *= 2
+        with pytest.raises(ValueError, match="intent"):
+            entrypoint.record_exploratory_intent(config, data, args)
+    assert path.read_bytes() == original
+
+
+def test_exploratory_full_quality_failure_remains_failure(monkeypatch):
+    monkeypatch.setattr(fresh, "artifact_directory_sha256", lambda _: "a" * 64)
+    monkeypatch.setattr(fresh, "file_sha256", lambda _: "b" * 64)
+    monkeypatch.setattr(fresh, "write_fresh_json", lambda *a: None)
+    summary = GateRunSummary(40, 0, 0.0, 40, 40, 40, {"eos": 40})
+    report = fresh.write_fresh_gate(_config(), _data(), "full", summary, "a" * 64)
+    assert report["passed"] is False
+    assert report["promotion_authority"] is False
+    assert report["minimum_schema_pass_rate"] == 0.9
+
+
+def test_exploratory_intent_does_not_block_reserved_checkpoint_resume(tmp_path):
+    config, data = _config(), _data()
+    config["training"]["output_dir"] = str(tmp_path / "adapters")
+    args = entrypoint.parse_args(
+        ["--stage", "full", "--exploratory-full-reason", "dataset comparison"]
+    )
+    reservation = dict(
+        adapter_stage=tmp_path / "adapters/full",
+        checkpoint_stage=tmp_path / "checkpoints/full",
+        config_sha256=fresh.source_training_config_sha256(config),
+        stage="full",
+    )
+    reserve_training_stage(**reservation, resume_from_checkpoint=None)
+    entrypoint.record_exploratory_intent(config, data, args)
+    checkpoint = reservation["checkpoint_stage"] / "checkpoint-25"
+    checkpoint.mkdir()
+    (checkpoint / "trainer_state.json").write_text("{}")
+    args.resume_from_checkpoint = checkpoint
+    reserve_training_stage(**reservation, resume_from_checkpoint=checkpoint)
+    entrypoint.record_exploratory_intent(config, data, args)
+    assert {p.name for p in reservation["adapter_stage"].iterdir()} == {
+        ".aegislm-stage-reservation.json"
+    }
