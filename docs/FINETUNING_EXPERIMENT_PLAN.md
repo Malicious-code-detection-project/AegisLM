@@ -1704,3 +1704,710 @@ base의 `baseline/development.{json,jsonl}`, 학습의 `decision/{training,wandb
 한정한다. test500은 optimizer/평가에 사용하지 않았으며 원천 라벨/CWE의
 미검수 상태와 evidence 미학습 상태를 유지했다. 학습 loss나 재로딩 성공을
 JSON 유효성·held-out 취약점 정확도·production 승인으로 해석하지 않는다.
+
+### 2026-10-03: max-new-tokens-65536 — 생성 한도 비교 실험
+
+base development100에서 100건 모두 생성128 token을 소진하고 final 채널이
+없었다. 사용자가 최대 생성 토큰 수를 원인 가설로 두고 2**16 설정을 포함한
+실험표 작성과 실행을 요청했다. `2**16`은 **65,536**이고, 공식 모델과 로컬 pinned
+snapshot의 `max_position_embeddings`는 **131,072**다.
+[공식 모델 설정](https://huggingface.co/openai/gpt-oss-20b/blob/main/config.json)의
+문맥 한도는 입력과 출력을 합한 값이다. 65,536을 모델의 공식 최대치로
+기록하지 않고 이번 실험의 `max_new_tokens`로 사용한다.
+
+| 모델 | 생성 상한 | validation 표본 | 비교 목적 |
+| --- | ---: | ---: | --- |
+| base / final adapter | 128 | 동일2건, 라벨별1건 | 기존 한도 재현 |
+| base / final adapter | 512 | 동일2건 | 소폭 확장 시 final 생성 여부 |
+| base / final adapter | 2,048 | 동일2건 | reasoning에 충분한 여유를 주는 비교 |
+| base / final adapter | 65,536 | 동일2건 | 요청한 큰 생성 상한 적용 |
+
+실험 ID는 `cc-max-new-tokens-65536-20261003-v1`, 제목은
+`max-new-tokens-65536 (context-window-131072)`다.
+설정은 `configs/cc_max_new_tokens_65536_v1.json`, 실행은
+`scripts/run_cc_max_new_tokens_65536.py`다. 기존 학습 설정·코드·adapter·데이터의
+hash 바인딩을 그대로 확인하고, 새 결과만
+`outputs/cc-max-new-tokens-65536-20261003-v1/`에 저장한다.
+validation1000의 기존 development100에서 결정적인 순서로 라벨별1건을
+선택한 뒤 모든 모델·한도에 같은 ID와 gold-free system/user 입력을 사용한다.
+test500은 표본 선택·generation·평가에 쓰지 않는다.
+
+기존 학습4096과 구분해 **추론 runtime context만131,072**로 로딩한다.
+모든 실험 행에서 입력 token+요청한 생성 상한이 문맥 한도 안에 있는지
+검사한다. tokenizer/date/low reasoning/greedy/4bit revision은 동일하게 유지한다.
+EOS가 나오면 일찍 종료하며65,536개를 강제로 출력하지 않는다.
+건당 `max_time=300`초 보호 한도를 둔다. 실제로 출력한 token 수, EOS,
+token_limit/time_limit, final 채널, JSON parse/schema와 peak CUDA allocated/
+reserved memory를 기록해 시간 초과를 생성 상한 도달과 혼동하지 않는다.
+이 시간 한도는 decode step 경계에서 검사하며 정확한300초 강제 종료가 아니다.
+
+```bash
+experiments/training-loop-debug/.venv/bin/python scripts/run_cc_max_new_tokens_65536.py --stage prepare
+experiments/training-loop-debug/.venv/bin/python scripts/run_cc_max_new_tokens_65536.py --stage run
+```
+
+이 실험은 optimizer0회인 원인 진단이다. 표본2건의 정확도·JSON 성공률을
+전체 validation 또는 test500의 품질 결과로 해석하지 않는다. 같은 runtime
+context에서 한도만 비교하므로 이전4096 context의100건 결과와 직접 합치지
+않는다. 큰 한도에서 계속 실패하면 길이 부족만으로 설명하지 못하며
+prompt/template/runtime·양자화 등을 별도 가설로 확인한다. 학습 중
+`eval_strategy="no"`인 설정이나 validation loss 기록을 바꾸는 작업은 포함하지 않는다.
+
+#### 가설과 반증 조건
+
+- **H1: 생성128 token이 reasoning과 최종 JSON을 함께 담기에 부족하다.**
+  관측 근거는 기존 base100의 length128/analysis100/final0이다.
+  큰 한도에서 동일 입력의 정상 EOS·final·유효 JSON이 회복되면 이 표본에서
+  H1을 지지한다. 길이를 늘려도 반복·시간 초과·잘못된 출력이 계속되면
+  H1만으로 실패를 설명할 수 없다. 시간 초과는65,536 token을 실제로 모두
+  출력한 실험과 구분하며, 이 경우 그 토큰 한도 자체의 효과는 미검증이다.
+- **H2: prompt 또는 Harmony template/채널 전환 문제다.** 첫 base raw output에
+  반복 문장과 예상하지 않은 commentary/tool 형태가 보였다. 이는 관측이고
+  template 결함의 증명은 아니다. 이번 실험에서는 prompt와 template를
+  고정하며, H1로 설명되지 않을 때 별도 비교 후보로 남긴다.
+- **H3: 4bit/Unsloth 추론 runtime의 문제다.** 이번에 runtime·양자화는
+  바꾸지 않으므로 이 가설을 직접 검증하거나 배제하지 않는다.
+
+입력 형식·checksum·분할 검사는 통과했지만 원천 라벨/CWE는 미검수다.
+출력 검사 실패를 곧바로 데이터 라벨 문제로 귀속하지 않고, 형식 회복을
+취약점 판단 정확도 또는 근거 설명 품질 회복으로 해석하지 않는다.
+
+#### 과정과 재현 기록
+
+사용자 요청 순서는 검증 실패 원인 확인 → 생성 상한 비교 실험 요청 →
+가설에 재사용할 수 있도록 전체 과정 문서화 요청이다. 다음을 함께 보존한다.
+
+- 사전 확인: Git fetch/status, 공식·로컬 context131,072, GPU 유휴 상태,
+  원 학습 config/hash와 source60/package/tokenizer/dataset 바인딩.
+- 변경 범위: 새 실험 config·실행 script·회귀 테스트와 이 문서. 기존 학습
+  config와 실행 소스의 고정 hash는 유지해 원 학습 기록을 덮어쓰지 않는다.
+- 실행 전 검사: 생성65,536 전달, 입력+출력 context 검사, gold 제거,
+  deterministic 표본 선택, EOS/token_limit/time_limit 분리 테스트.
+- 재현 자료: `manifest.json`의 Git HEAD·추가 실행 script hash·UTC 준비 시각,
+  config snapshot, `execution-source.py`, 고정 prompts/gold의 hash와 ID,
+  기존 학습 provenance, package/GPU 정보, 모델별 `runtime.json`.
+- 실행 자료: 모델별 `base.log`/`adapter.log`, 각 한도별
+  `predictions.jsonl`·`generation.json`·`evaluation.json`, 최종
+  `comparison.json`/`max-new-tokens-65536-comparison.md`. 실패한 실행 로그도 보존한다.
+
+위 계획과 가설은 실행 전에 고정했다. 실행한 검증 명령·종료 코드·실측 결과·
+중간 실패·해석은 아래에 추가하며, 미실행 내용을 완료로 기록하지 않는다.
+
+#### 명명과 실행 전 수정 이력
+
+사용자가 파일 제목만으로 주요 변경점을 식별할 수 있도록 요청했다.
+이번 실험은 **생성 상한128→65,536**이 주 변수이므로 config/script/test/출력
+폴더 이름에 `max_new_tokens_65536` 또는 `max-new-tokens-65536`을 넣었다.
+전체 문맥 한도는131,072이므로 `context-window-65536`으로 표기하지 않는다.
+앞으로도 실제 변경 변수와 수치를 제목에 넣고, `max`처럼 환경에 따라 뜻이
+달라지는 이름보다 수치를 우선한다. config의 제목·변경 변수·기준값·목표값은
+manifest와 실험표에도 기록한다.
+
+첫 검사에서 pytest520개와 Ruff check/format은 통과했다. mypy는 새 테스트의
+`row["messages"].append(...)`에서 dictionary 값 타입을 넓게 추론해 실패했다.
+해당 fixture 변수에 `row: dict[str, Any]`를 명시하는 타입 힌트를 추가했다.
+이는 테스트 코드의 타입 표기 수정이며 모델 설정·학습 데이터·생성 동작 변경은
+아니다. 최초 검사 로그와 종료 코드는
+`/tmp/aegislm-generation-budget-checks-20261003-v1/`에 보존한다.
+최초 재검사/prepare 명령은 사용자 중단으로 실행되지 않았고, 이름 변경 전
+프로세스·출력 폴더 확인 시점에 GPU 실험은 아직 시작하지 않았다.
+
+#### 새 이름으로 검사·준비·실행
+
+파일명 변경 후 `uv run --offline --frozen`으로 pytest tests/ -q(520 passed,
+3.46초), Ruff check(통과), Ruff format --check(94 files), mypy aegislm/ tests/
+(70 source files, 통과)를 확인했다. 모든 종료 코드는0이다.
+위 prepare 명령도 종료 코드0으로 완료했고, original source60/config/package/
+tokenizer/dataset 바인딩은 유지했다. 모델·package를 다운로드하지 않았다.
+
+`2026-10-03T11:57:44.595973+00:00`에 run 명령을 시작했다. 실행 도중에는
+완료를 주장하지 않으며 최종 상태는 `execution-result.json`의 종료 코드와
+모든16개 generation case·8개 평가 행에 근거한다.
+`verification/initial/`에 최초 검사 및 mypy 실패 로그,
+`verification/current/`에 이름 변경 후 검사·prepare 로그를 복사했다.
+`execution-intent.json`은 명령·UTC 시작 시각·optimizer0/test미사용을 기록하고,
+`execution.log`와 모델별 로그는 실패를 포함해 보존한다.
+GPU 로딩 로그에는 loaded context131,072가 표시되고, 생성 호출에는
+`max_new_tokens`가 `max_length`보다 우선한다는 안내가 있다. 실제 상한과
+출력 길이는 각 case의 `generation` 필드로 확인한다.
+
+#### 완료 결과 / max-new-tokens-65536
+
+run은 `2026-10-03T12:35:53.304679+00:00`에 종료 코드0으로 완료했다.
+전체 실행 시간은 **2,288.7086초(약38분9초)**다. base/adapter 각2건×4개 한도의
+총16개 generation과8개 평가 행을 기록했다. 원 학습의 adapter를 로딩했으며
+추가 optimizer는0회다. 두 runtime 모두 실제 `max_seq_length`와
+`max_position_embeddings`가131,072였다.
+
+| 모델 | max_new_tokens | final marker | JSON/schema 통과 | 정상 EOS | token_limit | time_limit | 실제 생성 tokens |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| base | 128 | 0/2 | 0/2 | 0/2 | 2/2 | 0/2 | 128, 128 |
+| base | 512 | 0/2 | 0/2 | 0/2 | 2/2 | 0/2 | 512, 512 |
+| base | 2,048 | 2/2 | 1/2 | 1/2 | 1/2 | 0/2 | 1,579, 2,048 |
+| base | 65,536 | 2/2 | 1/2 | 2/2 | 0/2 | 0/2 | 1,579, 2,534 |
+| adapter | 128 | 2/2 | 0/2 | 0/2 | 2/2 | 0/2 | 128, 128 |
+| adapter | 512 | 2/2 | 0/2 | 0/2 | 2/2 | 0/2 | 512, 512 |
+| adapter | 2,048 | 2/2 | 0/2 | 0/2 | 2/2 | 0/2 | 2,048, 2,048 |
+| adapter | 65,536 | 2/2 | 0/2 | 0/2 | 0/2 | 2/2 | 2,316, 2,318 |
+
+표의 final marker는 출현 횟수가 아니라 해당 case 수이며, 유효한 최종 답변을
+뜻하지 않는다. JSON/schema가 둘 다 통과한 것은base의 동일한present1건뿐이다.
+65,536 설정에서 base2건이 EOS까지 도달했다는 사실과 JSON2건이 통과했다는
+주장은 구분한다. 실제 JSON 통과는1건이다.
+
+- base의 present case는1,579 token에서 정상 JSON으로 종료했고 원천 라벨과
+  일치했다. 128/512에서는 동일 입력에 final이 없었으므로 이 case는 H1을 지지한다.
+- base의 not_observed case는65,536 설정에서2,534 token을 생성해 EOS로
+  종료했지만, 추출한 final에 문장과 여러 Harmony message/channel/tool 형태가
+  섞여 JSON 파싱이 실패했다. 뒤에 JSON처럼 보이는 부분이 있어도 첫 구조적
+  final 경계를 바꾸거나 마지막 JSON만 골라 기존 스코어를 개선하지 않았다.
+- adapter는8개 case 모두 JSON이 실패했다. final 경계 뒤에도
+  `<|end|><|start|>assistant<|channel|>...analysis<|message|>`와 같은
+  message/channel token이 반복됐다. 65,536 설정의2건은 약300.08/300.12초에
+  time_limit으로 종료했고 실제 생성 길이는2,316/2,318 token이었다.
+  이는65,536 token 전체를 소진한 결과가 아니다.
+
+이번 판정은 **생성 상한을 늘리면 base의 일부 출력은 회복되지만, 길이만으로
+base의 나머지1건과 adapter 실패를 설명할 수 없다**는 것이다. adapter의
+시간 한도 이후 출력은 미검증이며, 아무리 길게 생성해도 반드시 실패한다고
+주장하지 않는다. 다음 후보 가설은 Harmony 출력 계약, 학습 타깃의 special
+token과 supervised span, adapter 적용 시 추론 동작이다. 반복을 관측한
+것만으로 어느 가설도 원인으로 확정하지 않는다. 추가 학습과 test500 비교는
+이 진단에 포함하지 않았다.
+
+표본 ID는 `cc-55fa921bc64a64071c4dd1c9`와
+`cc-b8bec7f8c250c406ad4ed545`다. base128의 input IDs와 generated128 IDs는
+원 development100의 대응2건과 모두 정확히 일치했다. 이번 context 변경은
+이2건의128token 재현에 영향을 주지 않았지만 다른 입력에도 일반화하지 않는다.
+최대 torch CUDA peak allocated는14,688.0977MiB, peak reserved는14,750MiB다.
+각 generate 전에 peak 통계를 reset했고 model 상주분도 포함한다. 이전의
+10초 간격 nvidia-smi 관측값과는 측정 방법이 다르다.
+
+최종 실험표는 `outputs/cc-max-new-tokens-65536-20261003-v1/`의
+`max-new-tokens-65536-comparison.md`와 `comparison.json`, 종료 기록은
+`execution-result.json`이다. 16건의 raw token IDs, 추출 final, 판정 오류,
+latency·GPU 통계는 각 모델/상한의 artifact에 보관한다. 표본2건이므로
+기존minimum100 평가gate의overall_pass는 충족하지 않으며 품질 합격의 근거로 쓰지 않는다.
+
+2026-10-04 사후 검사에서는 기존 source/config/package/tokenizer/dataset
+바인딩, 현재 config·script·보관 source의 hash, 최종 adapter digest 보존을
+확인했다. 16건의 동일 ID·입력, 각 생성 상한과 실제 길이, EOS/토큰/시간
+종료 조건, 저장 prediction의 재채점 결과를 확인했고 모두 통과했다.
+같은 모델의 낮은 한도 출력은 높은 한도 출력의 정확한 token prefix였다.
+검증 결과는 `post-run-audit.json`에 보관한다. 이는 메인의 사후 검사이며
+독립 검토나 새 GPU 재실행을 했다는 뜻은 아니다. diff whitespace 검사도 통과했다.
+
+### 2026-10-04: unsloth-official-gpt-oss-20b-reference
+
+사용자가 기존 원인 탐색을 중단하고 공식 Unsloth GPT-OSS-20B 튜토리얼부터
+다시 시작하기로 했다. 기존 데이터·adapter·실패 결과와 생성 상한 비교 이력은
+보존하고, 먼저 공식 원본만 확보했다. 설치나 새 학습을 실행했다는 뜻은 아니다.
+
+- [공식 튜토리얼](https://unsloth.ai/docs/models/gpt-oss-how-to-run-and-fine-tune/tutorial-how-to-fine-tune-gpt-oss)
+- [공식 노트북 고정본](https://github.com/unslothai/notebooks/blob/92e38e86308748d18fc4cd4b104c4c6d3db1d67e/nb/gpt-oss-%2820B%29-Fine-tuning.ipynb)
+- [공식 Python 예제 고정본](https://github.com/unslothai/notebooks/blob/92e38e86308748d18fc4cd4b104c4c6d3db1d67e/python_scripts/gpt-oss-%2820B%29-Fine-tuning.py)
+
+원본 저장소는 `unslothai/notebooks`, 고정 commit은
+`92e38e86308748d18fc4cd4b104c4c6d3db1d67e`(commit date2026-09-27)다.
+수집 시각은 `2026-10-03T15:45:26.935028+00:00`(KST2026-10-04)이며,
+`outputs/unsloth-official-gpt-oss-20b-tutorial-20261004-v1/`에 notebook221,115 bytes,
+Python 예제16,960 bytes와 저장소 LICENSE를 내려받았다.
+notebook SHA256은 `4e7057b11fa491adaaa2084547eff5cb7ed41f214578a9031a969220b5ec1b2b`,
+Python SHA256은 `74ff47bb9212f482f7378d86f27bc088973e924ae427cc84891d87663131895a`다.
+45개 notebook 셀 중20개 code cell을 별도 JSON으로 추출했고 실행한 셀은0개다.
+`receipt.json`에 URL·commit·수집 시각·파일별 크기와 hash를 기록했으며,
+`unsloth-official-gpt-oss-20b-finetuning-reference.md`에 요약과 비교를 남겼다.
+
+확보한 코드의 주요 값은 max_seq_length1024, r8/alpha16/dropout0,
+SFTTrainer, batch1/accumulation4/max_steps30, lr2e-4/linear다.
+데이터는 Multilingual-Thinking이며 chat template로 text 열을 만들고
+`train_on_responses_only`를 사용한다. response 경계는
+`<|start|>assistant<|channel|>final<|message|>`다.
+기존 경로는 plain Trainer와 직접 만든 label을 사용하며 빈 analysis 메시지와
+final header도 supervised span에 포함될 수 있다. 마스킹이 같다고 가정하지
+않고 실제 token/label을 비교해야 한다. 이것을 실패 원인으로 확정하지 않는다.
+
+설치 셀의 Transformers4.56.2/TRL0.22.2는 현재5.5.0/0.24.0과 다르다.
+공식 튜토리얼의 prose와 notebook 값도 일부 달라, 예를 들어 학습 step은
+문장상60이지만 확보한 실행 셀은30이다. 재현에서는 이 고정 notebook의
+실행 셀을 기준으로 하고 환경 변경·데이터 변경·기존 코드 재사용을 각각
+기록한다. 모델 호출명은 alias이므로 실제 resolved model/revision/template를
+확인하기 전에는 기존 bnb-4bit 가중치와 같거나 다르다고 단정하지 않는다.
+
+다음 재현은 **공식 예제 기준 정상 학습·출력 확인 → C/C++ 데이터만 교체 →
+동일 validation 확인** 순서로 준비한다. notebook의64-token 생성 시연을
+완전한 최종 답변 검증으로 간주하지 않는다. 이번 단계는 자료 확보와 정적
+비교까지이며 package 설치, 모델·튜토리얼 dataset 다운로드, GPU 학습·추론,
+원천 데이터 포맷 변경은 아직 실행하지 않았다.
+
+### 2026-10-04: final-only-mask-vs-empty-analysis-code-review
+
+사용자가 팀원 작성 코드에서 실제 오류가 있는지 확인하기 위해 공식 예제와
+기존 학습 코드의 비교 분석을 요청했다. 비교 대상은 실제 v5/v7 학습에 사용한
+commit `975366a9e7ae0d56161097f7e558990d424b2b89`의 코드와 위에서 확보한
+공식 commit `92e38e86308748d18fc4cd4b104c4c6d3db1d67e`의 실행 셀이다.
+개인에게 귀속되는 오류나 Unsloth 자체의 실패로 단정하지 않는다.
+
+상세 보고서는
+`outputs/unsloth-official-gpt-oss-20b-code-review-20261004-v1/`의
+`final-only-mask-vs-empty-analysis-code-review.md`에 보관한다. 파일명은 실제
+비교 변수인 final-only mask와 빈 analysis 타깃을 표시한다. raw record와
+token IDs, audit script·실패 로그는 Git 제외 artifact로 보존한다.
+
+#### 확인된 설정 문제와 미확정 원인
+
+| 항목 | 확인 근거 | 판정 |
+| --- | --- | --- |
+| decision 생성 상한128 | `two_stage_runtime.py:205`; 원 base100건 모두128 tokens, EOS0/final0 | 해당 평가가 답변을 자른 설정 문제. JSON0%만으로 판단 능력/데이터 오류를 단정할 수 없음 |
+| 학습 중 validation 미실행 | Trainer에 eval_dataset 없음, `eval_strategy="no"` | validation 데이터 손상 근거가 아니라 실행을 분리한 설정. 별도 `--stage evaluate` 필요 |
+| baseline 승격 조건 | count100·missing/extra0·ID/config 일치 검사 | quality 통과 조건이 아님. 당시 탐색 학습은 사용자 승인 범위 |
+| 기존/공식 mask 차이 | 실제 cached tokenizer와 설치된 Unsloth mask로 train32건 재현 | 차이는 확정, adapter 반복 출력의 인과는 미확정 |
+
+공식 예제도 eval_dataset을 연결하지 않는 소규모 시연이다. 따라서 validation
+항목은 공식 기능 누락이라는 주장 대신 현재 품질 검증 목적과 실행 설정의
+차이로 기록한다. max_new_tokens는 analysis를 포함한 전체 생성 예산이다.
+
+비활성화 이유를 후속 확인하니 초기 source-v2 기록에는 Unsloth2026.6.9 /
+unsloth-zoo2026.6.7 / Transformers5.5.0 조합의 GPT-OSS eval forward에서
+create_causal_mask 호출 호환성 문제가 있어 Trainer의 validation loss를 끄고,
+저장 adapter를 재로딩한 뒤 생성 gate로 검증하도록 했다고 명시돼 있다.
+근거는 이 문서의 Canonical QLoRA configuration 및 fresh recipe 절,
+`scripts/train_source_unsloth.py`의 trainer_eval_loss_disabled와
+`scripts/train_source_unsloth_fresh.py`의
+trainer_eval_loss=disabled_due_to_pinned_runtime_mask_incompatibility 기록이다.
+v5/v7도 eval_strategy=no와 별도 evaluate 구조를 유지했다. 이는 문서에 남은
+초기 우회 사유이며, 같은 오류가 v7에서 다시 발생했는지는 이번 조회로 새로
+재현하지 않았다. validation을 중간 모니터링하는 것과 그 결과로 checkpoint를
+선택하는 것은 별개다. 새 SFTTrainer recipe에서는 development100 loss를
+25step마다 실제로 계산했으므로 그 경로의 중간 validation은 동작한다.
+
+현 loader는 protocol128을 고정하고 변경을 거부하므로 config만 고치면
+생성 호출이 바뀐다는 설명도 잘못이다. 다음 recipe에서 값과 호출을 함께
+연결해야 하며, 기존 run의 불변 config를 임의로 변경하지 않는다.
+
+앞선 길이 실험은 동일2건 중 base1건에서 JSON 회복을 확인했지만 adapter는
+실패했다. adapter의65,536 설정은 약300초 시간 한도에서 종료했으므로
+65,536 tokens 전체를 사용했다거나 길이가 전체 원인이라고 주장하지 않는다.
+
+#### CPU 마스킹 재현
+
+train10,000건의 assistant content를 집계하니 두 JSON 문자열이 각5,000건이다.
+클래스별 첫16건, 총32건에 기존 helper를 적용하고, 동일 input_ids에 공식
+response header로 설치된 Unsloth Zoo2026.6.7 마스크를 적용했다.
+Unsloth 본체를 import하지 않고 검토한 함수3개만 AST로 추출했다.
+그 결과는 다음과 같다.
+
+| 클래스 | 기존 supervised tokens | 공식 final-only tokens | 추가 header tokens |
+| --- | ---: | ---: | ---: |
+| present | 16 | 7 | 9 |
+| not_observed | 18 | 9 | 9 |
+
+기존 labels에는
+`<|channel|>analysis<|message|><|end|><|start|>assistant<|channel|>final<|message|>`
+9토큰이 JSON 앞에 포함된다. 공식 mask를 같은 serialization에 적용하면
+JSON과 `<|return|>`만 학습한다. 기존 label의50–56.25%가 답변 앞 형식이므로
+loss 하락을 판단 성능 개선으로 읽지 않는다. header 학습 자체는 유효한 SFT
+설계일 수 있으며, 이것이 adapter 실패 원인이라는 결론은 아직 없다.
+
+32건 모두 prompt 부분이 -100이었고 종료 토큰200002가 supervised span에
+포함됐다. 실제 DataCollatorForSeq2Seq에서도 labels가 보존되고 padding만
+-100으로 마스킹됐다. 이 표본에서 입력 마스킹 손상이나 EOS 학습 누락은
+재현되지 않았다.
+
+현재 cached template에서는 assistant의 thinking 필드를 제거하면 final
+channel 없이 `<|start|>assistant<|message|>`가 렌더된다. 이 role/content
+문자열에 공식 final-only mask만 적용하면32건 모두 supervised tokens0이다.
+이는 다음 포맷 변경 시 발생하는 재현된 오류이며 기존 학습이 그 방식으로
+진행됐다는 뜻이 아니다. 함수 이름만 교체하지 말고 실제 header, label>0,
+EOS를 함께 검사해야 한다.
+
+CPU 실행 명령은 다음과 같다.
+
+```bash
+experiments/training-loop-debug/.venv/bin/python \
+  outputs/unsloth-official-gpt-oss-20b-code-review-20261004-v1/mask-comparison-audit.py
+```
+
+최종 실행은 종료 코드0, CUDA initialized=false, model load=false,
+optimizer0이며 test split은 사용하지 않았다. 기존 source/config/dataset/
+tokenizer의 전후 hash는 같았다. 결과는 `cpu-audit-summary.json`,
+`mask-comparison.json`, `cpu-audit-attempt-2.log`로 보존한다.
+최초 audit는 새 감사 script가 apply_chat_template 반환을 list로 가정해
+IndexError로 실패했다. `return_dict=False`를 명시해 재실행했고 성공했다.
+최초 실패는 `cpu-audit.log`에 보존하며 팀 코드의 오류로 집계하지 않는다.
+
+#### 기타 비교와 다음 수정 후보
+
+plain Trainer와 SFTTrainer, LoRA target 범위/dropout, LR/scheduler/decay,
+Transformers5.5.0/TRL0.24.0과 공식 설치 셀4.56.2/0.22.2는 차이가 있다.
+현재 근거로 이 차이 자체를 버그로 분류하지 않는다. 공식 로드 dtype=None과
+설명상의float32 주장은 구분하며 기존 bf16=True를 실패 원인으로 단정하지
+않는다. alias와 pinned runtime 이름도 resolved weights 확인 전에는 다른
+모델을 잘못 불렀다고 판단하지 않는다.
+
+checkpoint100의 epoch는0.32다. batch1×accumulation32×100 updates의
+3,200 presentations이며 train pool10,000건을 한 번씩 학습한 결과가 아니다.
+고정 예산으로 이미 기록된 조건이고 실제 step 수가 잘못된 것은 아니다.
+
+다음 후보는 공식 출력 동작을 먼저 확인하고 C/C++ serialization/mask의
+CPU 검사를 거친 뒤, 동일 모델·표본·학습 예산에서 mask만 변경하는 비교다.
+Trainer/package/LoRA/mask를 동시에 바꾸면 원인을 분리할 수 없다.
+초기 품질 측정은 validation에서 EOS/final/JSON/판단 일치율을 함께 기록하고
+test500은 최종 비교용으로 보존한다. 이번 리뷰에서는 production 학습 코드
+수정, 새 GPU 실행, package 설치, 새 학습, 팀원 메시지 전송을 하지 않았다.
+
+#### 팀원 전달용 요약과 현재 코드 재확인
+
+후속 요청에 따라 현재 코드가 실제 학습에 사용한 버전과 같은지 다시 확인했다.
+원 학습 manifest의 소스60개, CPU 감사의 입력·자산14개와 결과7개,
+공식 원본3개의 hash가 모두 일치했다. 기존32건의 마스크 재현 결과도 대조했다.
+추가 GPU 학습을 수행한 검증은 아니며 원 결과를 덮어쓰지 않았다.
+재확인 receipt는 같은 출력 폴더의
+`followup-current-code-verification-20261004-v1.json`이다.
+
+팀원에게는 다음과 같이 전달할 수 있다.
+“기존 평가에서 base100건 모두 생성 상한128에 도달해 final/EOS가 없었습니다.
+학습 중 validation도 꺼져 있어서 낮은 train loss만으로 품질을 확인할 수
+없었습니다. 공식 예제와 달리 빈 analysis 및 final header9토큰까지 loss에
+포함하지만, 그 차이가 출력 반복의 원인인지는 아직 확인되지 않았습니다.
+확인한32건의 입력 마스킹과 종료 토큰은 정상이었습니다.”
+
+현재 확인된 평가 설정 문제와 학습 설계 차이를 구분해서 전달한다.
+특정 작성자의 실수, 데이터 손상, Unsloth 결함으로 귀속하지 않는다.
+공식 helper를 적용할 때는 final header와 label>0을 확인해야 하며,
+role/content만 직렬화한 데이터에 helper를 단순 교체하면 label0이 되는
+재현 결과도 함께 전달한다.
+
+후속 결과 검사를 준비하며 평가 코드의 별도 예외 처리 오류도 CPU에서
+확인했다. `aegislm/evaluation/source_decision.py`의 `_case`는 assessment를
+문자열인지 확인하기 전에 허용 문자열 set에 포함되는지 검사한다.
+`{"assessment":["present"]}` 또는
+`{"assessment":{"value":"present"}}`는 TypeError(unhashable type)를 내어
+스키마 실패 집계 대신 평가를 중단한다. null/정수는 스키마 실패로 집계된다.
+이는 **재현된 평가 코드 오류**지만 과거 실제 모델 출력에서 이 형태가 나와
+실패했음을 확인한 것은 아니다. 재현 입력은 모두 합성이며 receipt는 같은
+비교 출력 폴더의 `schema-type-error-reproduction.json`에 보존했다.
+실행 중인 학습의 source hash를 유지하기 위해 기존 평가 코드는 수정하지
+않았고, 새 결과의 원문을 독립 집계할 때는 문자열 타입을 먼저 확인한다.
+
+### 2026-10-04: sfttrainer-final-only-mask-eos-return
+
+사용자는 확보한 공식 튜토리얼 소스로 학습을 시작하고 기존 생성 한도 실험표를
+확장하되 토큰 길이를 유지하며 답변 종료 토큰까지 생성하는 방식을 검토하도록
+요청했다. 새 설정은 `configs/cc_tutorial_final_only_eos_v1.json`, 진입점은
+`scripts/train_cc_tutorial_final_only_eos.py`, helper는
+`aegislm/training/tutorial.py`다. 원 v5/v7 source60/config/데이터/adapter와
+완료된 생성 한도 실험은 보존한다.
+
+#### EOS 검토와 길이 해석
+
+GPT-OSS 답변의 native 종료는 `<|return|>`(200002)다.
+`<|endoftext|>`(199999)는 엔진 종료로 별도 집계하고,
+`<|end|>`(200007)는 analysis 메시지도 끝낼 수 있으므로 답변 종료에 쓰지 않는다.
+기존 경로에도 `eos_token_id=[200002,199999]`가 이미 있었다. 따라서 이번 결과를
+새 종료 토큰을 추가한 효과라고 해석할 수 없다.
+[Transformers 생성 설정](https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)은
+EOS에 도달하면 상한보다 먼저 멈출 수 있도록 한다. max_new_tokens는 총 생성
+예산이며 종료 토큰이 항상 그 안에서 생성된다는 보장은 없다. EOS까지 무한히
+생성하거나 상한에서 강제로 EOS를 붙이면 정상 종료와 잘린 답변을 구분하기
+어려워진다. 새 경로는 forced EOS를 끄고 answer_end/endoftext/token_limit/
+time_limit을 따로 기록한다. 종료만으로 JSON/판단 품질을 합격 처리하지 않는다.
+
+“길이 유지”는 직전 진단의 생성 상한65,536·전체 context131,072로 해석해
+실행했다. 128을 뜻하는지 선택 질문에는 답변이 없어 직전 진단의 값을 유지했다.
+학습 입력 한도는4,096, 진단 시간 한도는 case당300초로 유지한다.
+max_time은 현재 decode pass 이후 검사하므로 정확한300초 hard timeout은 아니다.
+상한/시간 제한에 먼저 도달하면 종료 토큰을 기다리며 재시작하지 않고 미완결로 남긴다.
+
+실제 Transformers generate loop를 작은 CPU GPT2 테스트 모델에서 확인했다.
+4건 모두 통과했으며 return이 상한 전에 종료, message-end 이후에도 생성 지속,
+endoftext 종료, EOS 없이 상한 도달을 구분했다. 테스트는 합성 logits를 사용하며
+실험 모델에는 적용하지 않는다. CUDA initialized=false이며 결과는
+`outputs/cc-tutorial-final-only-eos-20261004-v1/native-eos-cpu-proof.json`이다.
+
+#### 공식 예제의 적용 범위
+
+이번 run은 **공식 text formatting → SFTTrainer → train_on_responses_only 경로를
+C/C++ 데이터에 적용한 recipe**다. Colab 원본 환경·데이터의 그대로 재현은 아니다.
+
+| 항목 | 기존 v7 | 새 recipe |
+| --- | --- | --- |
+| 학습 풀/입력/예산 | 10,000 / 4,096 / batch1×accum32×100steps | 유지, 3,200 presentations |
+| Trainer / mask | plain Trainer / empty-analysis 및 header 포함 | SFTTrainer / final JSON+return만 |
+| r / alpha / dropout | 8 / 16 / 0.05 | 공식8 / 16 / 0 |
+| LR / scheduler / decay / warmup | 1e-4 / cosine / 0.01 / 10steps | 공식2e-4 / linear / 0.001 / 5steps |
+| expert 범위 | layers7/15/23 | native linearized MoE의24개 layer 전체 |
+| 중간 validation | 없음 | development100 loss를25step마다, batch1/loss-only |
+| 추론 | bare assistant 시작 | 동일 bare 시작과 gold-free final-prefill 각각 비교 |
+
+고정 공식 commit은 `92e38e86308748d18fc4cd4b104c4c6d3db1d67e`다.
+원본은 max_seq_length1024/batch1/accum4/max_steps30이며 C/C++ 길이와 기존
+학습 예산을 위해 위 값으로 바꿨다. pinned 4bit 모델과 현재 package를 재사용하고
+새 model 다운로드·package upgrade를 하지 않는다. TRL 버전과 설치된 trainer/
+mask/MoE 구현 hash도 새 manifest에 추가한다.
+
+현재 BNB 모델의 expert는 `gate_up_projs/down_projs` ModuleList다. 공식 target
+이름으로3D parameter를 자동 선택하면 실제 구조와 달라질 수 있어, attention과
+모든 linearized expert를 regex로 명시하고 `target_parameters=[]`로 자동선택을
+끈다. 사전 예상은 attention96 + expert1,536이며 실제 적용 이름/shape/
+trainable 수와 finite backward는 아래 GPU preflight에서 확인했다.
+기존 약15.04M보다 넓은 대상이므로 mask/Trainer만의 인과 실험은 아니다.
+
+#### 시작 prefix와 전수 검사
+
+공식 final-only mask를 사용하면 final header 전까지의 전이는 loss에서 제외된다.
+cached template의 add_generation_prompt=True는 bare assistant에서 끝난다.
+새 경로는 이를 구분하여 같은2개의 validation prompt를 두 방식으로 생성한다.
+final-prefill은 system/user 뒤에 내용과 thinking이 빈 assistant를 렌더하고
+맨 끝 return만 제거한다. gold JSON이나 판단 라벨을 입력에 넣지 않는다.
+이 prefix가 실제 첫 supervised token 직전과 일치하는지 CPU 전수 검사한다.
+prefill에서 final header는 입력에 있었음을 별도 기록하고, 모델이 생성했다고
+집계하지 않는다. 모델이 내놓은 raw generation과 추출 JSON은 모두 보존한다.
+
+train10,000/dev100의 CPU audit에서 모든 label이 정확히 JSON+return인 것을
+확인했다. supervised tokens는 train7토큰5,000건/9토큰5,000건, dev는각50건이고
+max input은 train4,055/dev2,583이었다. 공식 helper가 zero-label 행을 제거할 수
+있으므로 실제 SFTTrainer/helper 이후에도 count/ID/order/input IDs/labels를
+모두 대조한다. SFT 준비 과정에서 ID 열이 제거되면 전체 token/order 일치부터
+검증한 뒤 ID를 재부착하며, tensor collator에는 모델 필드만 전달한다.
+
+독립 계획 검토에서 prefix 불일치와 helper 필터링을 지적받아 이 검사를 추가했다.
+독립 코드 검토에서는 preflight collator에 문자열 ID가 들어갈 수 있는 결함과
+SFT의 ID 열 제거를 지적받아 모델 필드 분리·순서 검증을 반영했다. 초기 CPU
+prepare 후보는 `run/`에 보존하고 validation W&B projection 등을 반영한 당시
+후보는 `run-v2/`에 새로 바인딩했다. 리뷰 결과와 초기 검사 실패도 로컬 task에 기록한다.
+
+run-v2의 실제 GPU 사전 검사는 종료 코드1로 실패했다. 수동 preflight가
+SFTTrainer.train의 학습 모드 전환 wrapper를 거치지 않고 compute_loss를
+호출해 eval attention 경로로 들어갔다. 이 경로의 out=matmul은 gradient가
+있는 입력을 지원하지 않아 역전파 전에 오류가 발생했다. 본 학습·optimizer
+update·새 W&B run은 시작하지 않았다. 이는 이번에 추가한 수동 사전 검사
+코드의 결함이며, 이전 팀원 코드의 품질 실패 원인으로 소급하지 않는다.
+실패 로그는 `execution-v2.log`, receipt는 `run-v2/execution-result.json`에
+보존했다. 수정 후보는 실제 Trainer 설정으로 model.for_training/model.train을
+호출하고 `run-v3/` 및 별도의 adapter/checkpoint attempt 경로에서 검증한다.
+모델·데이터·패키지·학습 예산·생성 상한은 바꾸지 않는다.
+
+run-v3의 CPU 검사는 pytest531 passed, Ruff check/format 및 mypy72개 파일
+통과다. 수정 후 실제 GPU preflight도 optimizer0으로 통과했다.
+가장 짧은230토큰/긴4,055토큰 입력의 loss는 각각1.678049/1.868650이며
+두 입력 모두 training_mode=true, 유한한 비영 gradient를 확인했다.
+실제 주입 모듈은1,632개, 학습 파라미터는92,454,912개이며 train10,000/
+dev100의 토큰·정답 label 보존 검사도 통과했다. 정밀도는 bf16=true,
+fp16=false, force_float32=0이었다. peak allocated15,952.75MiB,
+reserved16,452MiB이며 결과는 `run-v3/preflight.json`에 보존한다.
+본 학습용 새 프로세스에서 실제 step1/100을 확인했다. 첫 training loss는
+1.350388, gradient norm은21.050524이며 warmup 첫 학습률은0이었다.
+[W&B run c9gsifji](https://wandb.ai/erad3254-looking-for-a-job/aegislm/runs/c9gsifji)의
+원격 기록 준비를 학습 전에 확인했다. 첫 step 시점에는 완료 결과와 adapter
+품질을 확인하지 않았으며 첫 step loss로 개선을 주장하지 않는다.
+
+25-step에서 development100의 첫 검증 loss는5.234795였다. 같은 step의
+training loss0.085675와 차이가 크다. checkpoint-25의 Trainer state는
+global_step25/epoch0.08이고 adapter·optimizer·scheduler 저장을 확인했다.
+W&B API에서도 step25의 validation/loss5.234795를 동일하게 확인했고,
+`run-v3/wandb-observation-first-validation.json`에 receipt를 보존했다.
+validation은 학습에 섞이지 않은100건이며 JSON 생성 품질 지표와는 다르다.
+높은 검증 loss의 원인은 아직 확정하지 않았다. 실제 일반화 실패 가능성과
+GPT-OSS의 train/eval attention 경로·정밀도 차이 가능성을 가설로 기록하며,
+어느 쪽도 이번 평균 loss만으로 증명하지 않는다. 고정100-step 예산과
+validation25/50/75/100 조건을 유지하고 최종 생성 결과를 함께 확인한다.
+
+50-step의 training loss는0.075435, 두 번째 검증 loss는4.965523이었다.
+첫 검증보다 낮아졌지만 train/validation 간 차이는 여전히 크며 JSON 생성
+품질 개선으로 해석하지 않는다. checkpoint-50의 global_step50/epoch0.16과
+adapter·optimizer·scheduler 저장을 확인했다. 동일 실행 프로세스에서 다음
+75/100-step 검증과 학습 후 생성 평가를 이어간다.
+W&B API로25/50의 두 검증 값이 로컬과 정확히 일치함을 확인했으며,
+`run-v3/wandb-observation-validation-50.json`에 원격 확인 기록을 보존했다.
+
+75-step의 training loss는0.066526, 세 번째 검증 loss는4.961874였다.
+50-step 검증4.965523과 거의 같은 수준이다. checkpoint-75의
+global_step75/epoch0.24 및 adapter·optimizer·scheduler 저장을 확인했다.
+W&B의25/50/75 검증 값도 로컬과 정확히 일치했으며,
+`run-v3/wandb-observation-validation-75.json`에 보존했다. 낮은 training
+loss를 JSON 생성이나 판단 품질 개선으로 해석하지 않고100-step 완료 후
+같은2개 입력의 생성 결과를 확인한다.
+
+100-step 학습은 최종 어댑터 저장까지 완료했다. 평균 training loss는
+0.1199569928, elapsed_seconds는6,419.9631이고 epoch는0.32다.
+이는 train pool10,000건 중3,200 presentations이며 한 epoch 완료가 아니다.
+네 번째 development100 validation loss는4.9810667038로, 50/75-step보다
+소폭 높고 training loss와의 큰 차이는 남아 있다. adapter fingerprint가
+학습 전후 달라졌고 최종 저장 artifact의 SHA256은
+`ca6f564955673f5d819db6a68497b23adb01a363cbbc5a295629674b8acdf32b`다.
+완료 기록은 `run-v3/training.json`과 adapter 부모의 `training.json`이다.
+새 프로세스에서 저장 adapter를 reload하고 아래 생성 비교를 완료했다.
+W&B API에서 state=finished, optimizer_steps=100, training_complete=true와
+100개 training loss 및25/50/75/100의 검증4개를 확인했다. 모든 값이 로컬과
+일치했으며 `run-v3/wandb-observation-training-complete.json`에 보존했다.
+
+#### 확장 실험표와 실행 결과
+
+기존8행을 그대로 가져오고 다음2행을 추가했다. 같은2건의 결과는 진단 자료이며
+100건 품질 gate 통과나 test500 결과로 일반화하지 않는다. test는 사용하지 않았다.
+
+| 새 모델 | 시작 방식 | 생성 상한 | 표본 | 생성 final / 입력 final | JSON / schema | return 종료 | 시간 제한 | 실제 tokens |
+| --- | --- | ---: | ---: | --- | --- | ---: | ---: | --- |
+| tutorial_adapter | bare-assistant | 65,536 | 2 | 0 / 0 | 0 / 0 | 0 | 2 | 1,272–1,278 |
+| tutorial_adapter | final-prefill | 65,536 | 2 | 0 / 2 | 2 / 2 | 2 | 0 | 7–9 |
+
+bare-assistant는 두 건 모두 analysis에서 입력에 없는 예시 함수 등을 언급하고
+같은 문구를 반복했다. final header와 EOS가 나오지 않아 각각300.388/300.171초
+후 시간 제한으로 멈췄다. 이는 정상 종료된 JSON을 parser가 거부한 결과가 아니라
+final 답변을 생성하지 못한 결과다. 실제 생성량은65,536에 도달하지 않았다.
+
+같은 adapter의 final-prefill은 각각
+`{"assessment": "present"}<|return|>`와
+`{"assessment": "not_observed"}<|return|>`를1.895/2.306초에 생성했다.
+두 출력 모두 schema 유효하고 원천 라벨과 일치했다. 입력 prefix에는 정답이
+없었으며 final header가 입력에 있었으므로 생성 final 성공으로 세지 않았다.
+200002는 모델이 실제 생성한 마지막 토큰이며 forced EOS는 사용하지 않았다.
+이미 존재하던 native EOS 설정이 이 두 경우에서 상한 전에 종료하는 것을 확인했다.
+
+동일 adapter 내에서 시작 prefix만 바꾼 비교는 학습의 supervised boundary와
+추론 시작 형식의 일치가 출력 동작에 영향을 준다는 근거다. 다만 이전 v7과는
+Trainer/mask/LoRA 범위/hyperparameter도 동시에 달라졌으므로 이전 실패의
+원인이 mask 하나였다고 결론 내릴 수 없다. 원천 라벨은 미검수이며 두 건의
+일치가 보안 판단 정확성을 확정하지 않는다. 표본수 최소20건 gate를 만족하지
+못하므로 두 report 모두 overall_pass=false다. 높은 development100 loss의
+원인도 여전히 미확정이며, 더 넓은 validation 생성 검증이 후속 과제다.
+
+```bash
+experiments/training-loop-debug/.venv/bin/python \
+  scripts/train_cc_tutorial_final_only_eos.py --stage prepare
+experiments/training-loop-debug/.venv/bin/python \
+  scripts/train_cc_tutorial_final_only_eos.py --stage run
+```
+
+run은 별도 process의 GPU preflight(optimizer0) → fresh model100step 학습 및
+온라인 W&B → fresh adapter reload와2개 시작 방식 평가 순서다. 최종 table은
+`run-v3/sfttrainer-final-only-mask-eos-return-comparison.md`, 구조화 표는
+`run-v3/comparison.json`, 종료 기록은 `run-v3/execution-result.json`이다.
+실제 parent 종료 코드0, steps100/table_rows10/test_used=false를 확인했다.
+생성 원문·token IDs·개별 평가는 `run-v3/evaluation/`의 두 시작 방식 폴더에,
+actual context/max_seq_length131,072와 provenance는 `run-v3/reload.json`에
+보존했다. 원 v5/v7 모델·데이터·소스와 기존8행은 덮어쓰지 않았다.
+
+#### 완료 후 검증과 감사 도구의 실패 이력
+
+CPU-only 사후 감사는 저장 adapter digest와 reload provenance, 원 소스60개와
+새 실행 소스·설정·패키지 hash, 학습100step과 네 검증 지점, 실제 생성 token IDs,
+gold-free prefix 및 기존 bare 입력 일치, 원문 decode·종료 이유·JSON/schema,
+기존8행 보존과 새2행, test 미사용을 대조해 통과했다. W&B state=finished와
+100개 학습 loss/4개 검증 loss도 원격에서 다시 읽어 로컬과 일치함을 확인했다.
+최종 receipt는 `run-v3/post-run-audit-final-only-mask-eos-return.json`,
+성공 로그는 `post-run-audit-attempt-2.log`다. 이는 본 세션의 사후 검증이며
+새 GPU 결과에 대한 독립 리뷰를 수행했다는 뜻은 아니다.
+
+첫 사후 감사는 W&B history 반환 형태를 잘못 가정해 실패했다. 완료 run의
+API는 요청한 metric이 없는 행도 null 열로 반환해 두 scan 모두101행이었다.
+실제 training/loss 값은 step1–100의100개, validation/loss는25/50/75/100의
+4개였고 step0 등 나머지 해당 열은 null이었다. 감사 도구에서 null metric 행만
+제외하고 캐시 없이 재조회하되, 기대 step 집합과 모든 실제 값의 일치 검사는
+유지했다. 재실행은 종료 코드0이다. 최초 script는
+`post-run-audit-final-only-mask-eos-return-attempt-1.py`, 실패 로그는
+`post-run-audit.log`, 관찰값은 `run-v3/wandb-post-audit-scan-observation.json`에
+보존했다. 학습 재시작·metric 수정·원문 덮어쓰기는 하지 않았으며, 이 실패를
+기존 팀원 코드나 학습/W&B 기록 실패로 집계하지 않는다.
+
+### 2026-10-04: validation-loss-train-vs-eval-mode-analysis
+
+사용자는 새 학습의25step 간격 validation 결과를 분석하고 결과 보고서만
+커밋·푸시하도록 요청했다. 분석 대상은 완료된
+`cc-tutorial-final-only-eos-20261004-v1-attempt-v3`의 final100 adapter다.
+학습 코드·설정·W&B 원본·모델·데이터는 이번 보고서 커밋의 대상이 아니다.
+원 실행과 원격 W&B 기록은 앞 절의 경로 및 run c9gsifji로 연결한다.
+
+#### 대상과 수치 해석
+
+학습 풀은10,000건, 실제 예산은 batch1×accumulation32×100steps의
+3,200 presentations/epoch0.32다. 평균 training loss는0.1199569928이다.
+중간 validation은 validation1,000건에서 미리 고정한 development100건이며
+present/not_observed 각50건이다. 네 번 모두 같은100건을 사용했고 final
+JSON+return의7/9토큰만 loss 대상으로 남기는 전수 마스크 검사를 통과했다.
+이는 validation1,000건 전체 생성 평가나 test500 결과가 아니다.
+
+| step | epoch | 해당 step train loss | 직전25step train loss 평균 | development100 validation loss |
+| ---: | ---: | ---: | ---: | ---: |
+| 25 | 0.08 | 0.085675 | 0.268000 | 5.234795 |
+| 50 | 0.16 | 0.075435 | 0.078819 | 4.965523 |
+| 75 | 0.24 | 0.066526 | 0.067565 | 4.961874 |
+| 100 | 0.32 | 0.038503 | 0.065444 | 4.981067 |
+
+validation loss는25→50에서5.1439% 감소했고, 50→75는0.0735% 감소로
+거의 정체됐다. 75→100은0.3868% 증가했다. 25→100 전체 감소는4.8470%다.
+관측 최솟값은75step이지만50step과의 차이는0.003649에 불과하다.
+이 수치로 checkpoint75를 품질상 best로 선택하지 않았으며 비교 대상은
+계획대로 final100이다. step0/base의 동일 validation loss는 기록하지 않아
+학습 전 대비 개선·악화 여부도 이 곡선만으로 확정할 수 없다.
+
+각 train loss는 당시 서로 다른 학습 batch의 측정이고 validation은 고정100건의
+집계다. 직전25step 평균도 그 구간의 여러 가중치 상태에 대한 값이므로 같은
+가중치·같은 입력의 train/eval 비교와 동일하지 않다. 아래 추가 검사에서는
+입력과 final adapter를 고정했다. 낮은 training loss는 JSON 형식·EOS 예측도
+포함하므로 판단 정확도 자체와 같지 않다.
+
+#### 같은 입력·같은 가중치의 forward 비교
+
+높은 validation loss를 과적합으로 단정하기 전에 final adapter를 새 프로세스에
+불러왔다. train 최단/최장2건과 앞선 생성 비교의 validation2건을 선택하고
+같은 input IDs·labels·padding·BF16 autocast로 두 경로의 model loss를 비교했다.
+train 경로는 for_training과 model.train 및 gradient 활성화, trainer-eval
+경로는 for_training 이후 model.eval 및 gradient 비활성화다. 두 경로 모두
+use_cache=false, num_items_in_batch=None이며 별도 optimizer와 backward는 없다.
+이 결과는 직접 model forward이며 전체 SFTTrainer loop의 그대로 재현은 아니다.
+
+| 입력 | 입력 tokens | supervised tokens | train 경로 loss | trainer-eval 경로 loss |
+| --- | ---: | ---: | ---: | ---: |
+| train 최단 | 230 | 7 | 0.067993 | 0.045780 |
+| train 최장 | 4,055 | 7 | 0.010108 | 8.670376 |
+| validation 비교1 | 309 | 7 | 0.128509 | 6.291219 |
+| validation 비교2 | 253 | 9 | 0.017882 | 0.140493 |
+
+입력·labels가 같고 학습에 속한 샘플에서도 큰 차이가 재현됐다. 따라서
+**일부 입력에서 실행 경로가 loss에 큰 영향을 주는 것은 확인됐으며,
+원 train/validation 차이를 데이터 분할의 일반화 실패만으로 설명할 수 없다.**
+다만 train/eval 및 gradient 상태를 함께 바꿨으므로 차이가 생긴 정확한 kernel,
+attention mask, precision 또는 loss 계산 위치를 분리한 결과는 아니다.
+어느 경로가 올바른 causal cross-entropy를 산출하는지도 아직 확정하지 않았다.
+과적합·원천 분포 차이 가능성은 남아 있으며 데이터 손상이나 특정 작성자의
+실수로 귀속하지 않는다. 이4건의 직접 forward 결과를100건 전체 값으로
+일반화하지 않는다.
+
+검사 전후 in-memory LoRA fingerprint와 저장 adapter SHA256은 같았고
+optimizer_steps=0/backward_calls=0, 종료 코드0이었다. 재현 자료는
+`outputs/cc-tutorial-validation-analysis-20261004-v1/`에 보존했다.
+곡선 집계는 `validation-curve-analysis.json`, 동일 입력 결과는
+`same-input-train-eval-loss.json` 및 `same-input-mode-loss.jsonl`,
+실행 script는 `same-input-train-eval-loss.py`, 성공 로그는
+`same-input-mode-loss-attempt-2.log`다. 원 metric JSONL의 SHA256은
+`ec5f72b5ad7ee39f596d993f043b46021a854344626d132426ba2b4667d8aa02`다.
+
+최초 진단 script는 native model의 logits가3차원 tensor라고 가정해 IndexError로
+실패했다. 실제 최적화 forward는 빈 logits tensor를 반환했다. 수정 후 native
+model loss를 기록하고 logits가 없으면 수동 cross-entropy·token 정확도는 null로
+남겼다. 이번 결과에는 수동 CE로 loss를 검산한 근거가 없다. 최초 script와
+`same-input-mode-loss.log`를 보존하며 이 실패를 원 학습 코드 오류로 집계하지 않는다.
+
+#### 생성 결과와 결론
+
+이미 완료된 동일 final100 adapter의 두 시작 방식 결과도 함께 읽어야 한다.
+bare-assistant는 validation2건 모두 analysis 반복 후 약300초 시간 제한에
+도달해 JSON0/2·EOS0/2였다. gold-free final-prefill은 같은2건에서 JSON/schema
+2/2·원천 라벨 일치2/2였고 실제 생성한 return 토큰으로7/9토큰 후 종료했다.
+prefill의 final header는 입력에 있었으며 정답 JSON은 입력하지 않았다.
+생성 상한65,536/context131,072는 유지했고 forced EOS는 사용하지 않았다.
+
+현재 결론은 **final 시작 형식은 생성에 영향을 주고, validation loss는 실행
+경로의 영향을 먼저 확인해야 한다**는 것이다. 두 생성 성공을 전체 품질 합격으로
+확대하지 않고 높은 validation loss만으로 학습 실패·과적합을 확정하지 않는다.
+원천 라벨은 미검수이며 test500 생성 평가는 아직 실행하지 않았다.
+
+후속 순서는 같은 development 입력에서 train/eval/inference forward의 causal
+mask·정밀도·loss 산출을 대조해 비교 가능한 loss를 확보하고, 고정 final-prefill로
+더 넓은 validation 생성 평가를 수행하는 것이다. base/adapter에 같은 입력·시작
+방식·생성 예산을 적용하고 protocol을 확정한 뒤 test500을 비교한다.
+그 결과를 남긴 다음 다른 데이터셋의 학습 비교를 진행한다. 이번 보고서에서
+추가 학습·전체 validation 생성·test500 또는 다른 데이터셋 학습을 완료했다고
+주장하지 않는다.
