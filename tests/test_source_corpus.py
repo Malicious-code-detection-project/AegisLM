@@ -1,6 +1,9 @@
 """Regression tests for corpus leakage and source-label boundaries."""
 
+import importlib
 import random
+import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +19,50 @@ from aegislm.datasets.source_corpus import (
     split_for_group,
     tokens,
 )
+
+
+def test_decompile_shard_ids_are_unique_and_survive_normalization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pa = pytest.importorskip("pyarrow")
+    builder = importlib.import_module("scripts.build_cc_source_corpus")
+    # No Juliet inputs: avoid requiring its optional parser dependencies.
+    monkeypatch.setattr(builder, "make_parsers", lambda: {})
+    raw = tmp_path / "raw"
+    shards = [raw / "decompile-bench" / part / "data.arrow" for part in ("a", "b")]
+    for shard in shards:
+        shard.parent.mkdir(parents=True)
+        schema = pa.schema([("file", pa.string()), ("code", pa.string())])
+        with pa.OSFile(str(shard), "wb") as sink:
+            with pa.ipc.new_stream(sink, schema) as writer:
+                for i in range(2):
+                    writer.write_batch(
+                        pa.RecordBatch.from_pylist(
+                            [
+                                {
+                                    "file": f"src/project/{i}.c",
+                                    "code": "int f(){return 1;}",
+                                }
+                            ],
+                            schema=schema,
+                        )
+                    )
+    inputs: set[Path] = set()
+    rows = list(builder.source_rows(raw, tmp_path / "processed", {}, inputs))
+    assert inputs == set(shards)
+    assert len(rows) == 4
+    assert len({row["original_id"] for row in rows}) == 4
+    assert [row["input_row"] for row in rows] == [1, 2, 1, 2]
+    assert all(str(raw) not in row["original_id"] for row in rows)
+    records = [normalize_record(row) for row in rows]
+    assert all(record is not None for record in records)
+    ids = [record["id"] for record in records if record is not None]
+    with sqlite3.connect(":memory:") as db:
+        db.execute("CREATE TABLE records (id TEXT PRIMARY KEY)")
+        db.executemany(
+            "INSERT INTO records VALUES (?)", [(identifier,) for identifier in ids]
+        )
+        assert db.execute("SELECT COUNT(*) FROM records").fetchone()[0] == 4
 
 
 def test_comments_are_removed_without_corrupting_literals() -> None:

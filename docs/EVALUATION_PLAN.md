@@ -223,6 +223,15 @@ was visible during pipeline development. The secondary set supports label
 metrics only; evidence metrics remain null and are not combined with primary
 metrics.
 
+The decision-only evaluator requires both `present` and `not_observed` in the
+gold cohort for its binary-label coverage gate. Prediction diversity does not
+satisfy that gate. Non-string `assessment` values (including arrays and objects)
+are schema-invalid predictions recorded in the report, not evaluation crashes.
+For evidence-line evaluation, the challenge's complete `numbered_source_code`
+must equal `number_source_code(private_source_code)` before scoring or rendering.
+Matching IDs and line counts alone are insufficient; mismatched inputs raise
+`ValueError` instead of producing evidence scores.
+
 Automatic source-v2 metrics:
 
 - assessment accuracy, confusion matrix, macro-F1, and per-label recall

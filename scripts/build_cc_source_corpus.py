@@ -218,7 +218,8 @@ def source_rows(
                 input_file=str(path),
                 input_row=node.start_point.row + 1,
             )
-    for path in sorted((raw / "decompile-bench").glob("*/*.arrow")):
+    decompile_root = raw / "decompile-bench"
+    for path in sorted(decompile_root.glob("*/*.arrow")):
         inputs.add(path)
         with pa.memory_map(str(path), "r") as stream:
             index = 0
@@ -230,7 +231,7 @@ def source_rows(
                         continue
                     yield dict(
                         dataset="decompile-bench",
-                        original_id=str(index),
+                        original_id=f"{path.relative_to(decompile_root).as_posix()}:{index}",
                         code=row["code"],
                         label=None,
                         cwes=[],

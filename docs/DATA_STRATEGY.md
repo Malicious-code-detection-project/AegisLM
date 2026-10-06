@@ -412,6 +412,15 @@ multiple source CWEs remain in `annotation.cwe_candidates` rather than being
 arbitrarily assigned as positive function-level labels. Original locations and
 source IDs stay in provenance and never enter model-visible messages.
 
+As of the 2026-10-06 importer correction, DecompileBench `original_id` combines
+the Arrow shard's POSIX path relative to `decompile-bench/` and its one-based row
+index (continuous across record batches). Canonical IDs therefore distinguish
+rows in different shards, including shards with the same basename, without
+depending on the absolute download location. Regeneration changes DecompileBench
+IDs from the earlier row-only scheme; preserved pools and experiment artifacts
+retain their original IDs and must not be overwritten or mixed with regenerated
+records as if their identities were unchanged.
+
 - PrimeVul, DiverseVul, BigVul and Juliet source labels are retained as
   `source_label_unreviewed`, not upgraded to verified scoped-CWE decisions.
 - BigVul after-change functions, CVEfixes methods and DecompileBench source

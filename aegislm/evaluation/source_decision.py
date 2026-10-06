@@ -80,7 +80,7 @@ def evaluate_source_decisions(
             metrics["missing_prediction_count"] == 0
             and metrics["extra_prediction_count"] == 0
         ),
-        "both_binary_labels_present": tp + fp > 0 and tn + fn > 0,
+        "both_binary_labels_present": positives > 0 and negatives > 0,
         "minimum_precision": precision >= active.minimum_precision,
         "minimum_recall": recall >= active.minimum_recall,
         "maximum_false_positive_rate": fpr <= active.maximum_false_positive_rate,
@@ -168,11 +168,16 @@ def _case(
         case["errors"].append("output must be a JSON object")
         return case
     case["parse_success"] = True
-    if set(output) != {"assessment"} or output.get("assessment") not in _ALLOWED:
+    assessment = output.get("assessment")
+    if (
+        set(output) != {"assessment"}
+        or not isinstance(assessment, str)
+        or assessment not in _ALLOWED
+    ):
         case["errors"].append("output must contain only one valid assessment")
         return case
     case["schema_valid"] = True
-    case["assessment"] = output["assessment"]
+    case["assessment"] = assessment
     return case
 
 

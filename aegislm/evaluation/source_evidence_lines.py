@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from aegislm.datasets.source_evidence_lines import (
+    number_source_code,
     render_assessment_from_evidence_lines,
     validate_evidence_lines_output,
 )
@@ -131,13 +132,14 @@ def _evaluate_case(
     record: dict[str, Any],
     prediction: Prediction | None,
 ) -> dict[str, Any]:
-    assessment, target_cwe, line_count = _prompt_condition(challenge)
+    assessment, target_cwe, numbered_source = _prompt_condition(challenge)
     code = record.get("code")
     if not isinstance(code, dict) or not isinstance(code.get("text"), str):
         raise ValueError(f"{record_id}: private source code is invalid")
     source_code = str(code["text"])
-    if len(source_code.splitlines()) != line_count:
+    if number_source_code(source_code) != numbered_source:
         raise ValueError(f"{record_id}: numbered source and private code differ")
+    line_count = len(source_code.splitlines())
     expected = gold.get("expected_output")
     if not isinstance(expected, dict):
         raise ValueError(f"{record_id}: evidence gold is invalid")
@@ -195,7 +197,7 @@ def _evaluate_case(
     return case
 
 
-def _prompt_condition(row: dict[str, Any]) -> tuple[Any, str, int]:
+def _prompt_condition(row: dict[str, Any]) -> tuple[Any, str, str]:
     messages = row.get("messages")
     if not isinstance(messages, list) or len(messages) != 2:
         raise ValueError(f"{row.get('id')}: invalid evidence challenge")
@@ -218,7 +220,7 @@ def _prompt_condition(row: dict[str, Any]) -> tuple[Any, str, int]:
         or not isinstance(numbered, str)
     ):
         raise ValueError(f"{row.get('id')}: evidence condition is invalid")
-    return assessment, target_cwe, len(numbered.splitlines())
+    return assessment, target_cwe, numbered
 
 
 def _range_lines(output: dict[str, Any]) -> set[int]:

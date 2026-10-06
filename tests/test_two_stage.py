@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,6 +16,10 @@ from aegislm.datasets.source_evidence_lines import (
     validate_evidence_lines_output,
 )
 from aegislm.evaluation.harness import Prediction
+from aegislm.evaluation.source_decision import (
+    evaluate_source_decisions,
+    write_source_decision_summary,
+)
 from aegislm.evaluation.source_evidence_lines import (
     evaluate_source_evidence_predictions,
 )
@@ -82,6 +87,73 @@ def test_gold_evidence_fixture_scores_one() -> None:
     assert result["metrics"]["evidence_f1"] == 1
     assert result["metrics"]["renderer_pass_rate"] == 1
     assert not result["overall_pass"]  # sample count gate remains active
+
+
+@pytest.mark.parametrize("change", ["source", "numbering"])
+def test_evidence_rejects_same_length_source_mismatch(change: str) -> None:
+    source = "int x = 0;\nreturn x;"
+    messages = format_evidence_lines_payload(
+        target_cwe="CWE-457", source_code=source, assessment="not_observed"
+    )
+    if change == "source":
+        private_source = "int y = 1;\nreturn y;"
+    else:
+        private_source = source
+        messages[1]["content"] = messages[1]["content"].replace("0001|", "0009|")
+        assert "0009|" in messages[1]["content"]
+    with pytest.raises(ValueError, match="numbered source and private code differ"):
+        evaluate_source_evidence_predictions(
+            [{"id": "one", "messages": messages}],
+            [{"id": "one", "expected_output": evidence()}],
+            [{"id": "one", "code": {"text": private_source}}],
+            [Prediction("one", "test", "test", json.dumps(evidence()))],
+        )
+
+
+@pytest.mark.parametrize("assessment", [[], {}, None, True, 7, "invalid"])
+def test_malformed_decision_is_reported_without_aborting(
+    assessment: Any, tmp_path: Path
+) -> None:
+    gold = [
+        {"id": "bad", "expected_output": {"assessment": "present"}},
+        {"id": "good", "expected_output": {"assessment": "not_observed"}},
+    ]
+    predictions = [
+        Prediction("bad", "test", "test", json.dumps({"assessment": assessment})),
+        Prediction("good", "test", "test", '{"assessment":"not_observed"}'),
+    ]
+    result = evaluate_source_decisions(gold, predictions)
+    assert result["metrics"]["parse_success_rate"] == 1
+    assert result["metrics"]["schema_pass_rate"] == 0.5
+    assert result["cases"][0]["errors"]
+    assert result["cases"][1]["schema_valid"]
+    assert not result["overall_pass"]
+    report = tmp_path / "summary.json"
+    write_source_decision_summary(result, report)
+    assert json.loads(report.read_text()) == result
+
+
+def test_decision_single_class_gold_cannot_pass_default_gates() -> None:
+    gold = [
+        {"id": str(i), "expected_output": {"assessment": "present"}} for i in range(100)
+    ]
+    predictions = [
+        Prediction(
+            str(i),
+            "test",
+            "test",
+            json.dumps({"assessment": "present" if i < 99 else "not_observed"}),
+        )
+        for i in range(100)
+    ]
+    result = evaluate_source_decisions(gold, predictions)
+    assert not result["gates"]["both_binary_labels_present"]
+    assert all(
+        passed
+        for name, passed in result["gates"].items()
+        if name != "both_binary_labels_present"
+    )
+    assert not result["overall_pass"]
 
 
 def test_decision_uses_absolute_qwen_thresholds() -> None:
