@@ -1,2 +1,5 @@
 # Preserve the exact source-copy bytes and its documented SHA-256, including CRLF.
 references/이정민/raw/karpathy/llm-wiki.md -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+
+# Preserve byte-identical tutorial source, including upstream comment whitespace.
+scripts/b200/reference/training/original.py whitespace=-blank-at-eol

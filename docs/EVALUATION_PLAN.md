@@ -456,7 +456,12 @@ generation continues unchanged. It reads saved evaluation snapshots and records
 them in an `evaluation` run, not a training run. It can backfill already completed
 evaluations; it does not recreate missing training losses or historical GPU stats.
 
-Each of the 12 model/budget groups has 100 planned cases. Upload only completed,
+Each configured model has six budget groups with 100 planned cases each:
+base plus adapter plans 1,200 calls; an explicitly selected base-only run plans
+600. The tracker requires every configured group exactly once and rejects
+missing, duplicate, or unexpected groups. Planned and completed counts follow
+that configuration in both W&B metrics and local tracking progress.
+Upload only completed,
 pending, complete flags and the semantic/strict TP/FN/FP/TN/uncertain/invalid
 counts. Positive and negative completed counts expose partial-cohort imbalance.
 `label_match_over_completed` has the completed-case denominator and is explicitly

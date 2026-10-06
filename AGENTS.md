@@ -24,6 +24,7 @@ Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장
 | Phase D 완료 조건과 Phase E 착수 gate | `docs/PHASE_D_EXIT_CRITERIA.md` |
 | 파인튜닝 학습 로드맵과 실험 전략 | `docs/FINETUNING_EXPERIMENT_PLAN.md` |
 | GPT-OSS 서빙·판단 학습·평가의 차이와 100step 오류 해석 | `docs/GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md` |
+| B200 동결 데이터 이관·100step 재학습·base/adapter 재현 절차 | `docs/B200_REPRODUCTION_RECIPE.md` |
 | Phase C 테스트 기준과 평가 레퍼런스 | `docs/TEST_CRITERIA.md` |
 | 팀 기여 절차, 브랜치, 커밋, 검증 규칙 | `docs/CONTRIBUTING.md` |
 | PR 본문 작성 템플릿 | `docs/PR_DESCRIPTION_TEMPLATE.md` |

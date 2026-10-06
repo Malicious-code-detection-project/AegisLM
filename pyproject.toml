@@ -42,6 +42,10 @@ training = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
+[tool.ruff]
+# Historical tutorial/observer source is hash- and AST-checked during reproduction.
+extend-exclude = ["scripts/b200/reference"]
+
 [tool.mypy]
 python_version = "3.12"
 warn_unused_configs = true

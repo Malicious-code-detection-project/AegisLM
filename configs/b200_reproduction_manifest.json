@@ -1,0 +1,18 @@
+{
+  "description": "Frozen v5 inputs and metadata for B200 reproduction; payload stays outside Git",
+  "files": {
+    "data/processed/cc-source-candidates-20260928-v5/decision-candidates/train.jsonl": "b2827d06416fc256811bd6b3b662ff143d0f52604891856620153b2a1ec3e83f",
+    "data/processed/cc-source-candidates-20260928-v5/decision-candidates/validation.jsonl": "564fea1dabe56b90e1ab0b8cec0f4841dbbbe7578aaaafbb091863caef86238c",
+    "data/processed/cc-source-candidates-20260928-v5/manifest.json": "51db4812e9291a184d87818622ed8a5fc68542e75b9798cb36face961794c8f5",
+    "data/processed/cc-source-candidates-20260928-v5/split-audit.json": "d5343eb277b9c485b9ed92881fc5a4d24728dce0983655a446ac4eedd8630916",
+    "data/reproduction/b200-step100-v1/evaluation-config.json": "fe1999c2ba6654eb3e42a399a7f30feac9c9566dff67014f023c8285a6850499",
+    "data/reproduction/b200-step100-v1/evaluation-prepared.json": "165550f1eca90a0ab257661dffa33644268bf1544400e6225dbbf303a1782866",
+    "data/reproduction/b200-step100-v1/native-packages.json": "48225de3123b6d4f7bfb68e9023775d03a0d1d5db2b5c86db1f0a5ad467028e8",
+    "data/reproduction/b200-step100-v1/probe-inputs.json": "5212df2279adff873137f0b1180d47afa003be6ce58dc6e8552c6a9180457a2a",
+    "data/reproduction/b200-step100-v1/score-packages.json": "3fd85c7d053f236230186100cb1f642a32516b48a14191f7a5611783fb5ab5da",
+    "data/reproduction/b200-step100-v1/training/config.json": "359187819cb03d7f7be38b828b56ce35d3248497db493c619e835b6acaf9a9b7",
+    "data/reproduction/b200-step100-v1/training/dataset-audit.json": "babc5b27bb161f23569b7c6712888e3cdd7ea53324a7d747803cde58e306bcc4",
+    "data/reproduction/b200-step100-v1/training/gold.json": "6c6fe77e559970107913a8445eb9c854d741e7c37bcb3c74d19f6d600670eacd",
+    "data/reproduction/b200-step100-v1/training/prompts.json": "2a88fc8660fe81f6a2cde93ddc2eb6e80bd78a4dd1ed825d26f3470e8c0b09ae"
+  }
+}

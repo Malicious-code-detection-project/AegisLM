@@ -3926,7 +3926,7 @@ summary정정으로 기록한다. sidecar는 generation-failed 상태로 종료�
 | 학습 산출물 | 기존 공식 recipe의 100-step adapter, 새 학습 없음 |
 | 생성 고정값 | native sampling/EOS, runtime context 131072, timeout 없음, 추가 generate kwargs 없음 |
 | 실패 / 재개 | 실패 시 순회 중단, 완료 조건만 skip 가능; 부분 조건 이어붙이기는 거부 |
-| 현재 상태 | 입력 준비 및 CPU 검증 완료; v2 GPU 생성 미실행 |
+| 감사 당시 상태 | 입력 준비 및 CPU 검증 완료; 이후 GPU 결과는 아래 실행 결과 참조 |
 
 설정: `configs/cc_native_step100_validation100_fresh_process_v2.json`.
 출력: `outputs/cc-native-step100-validation100-fresh-process-20261006-v2/`.
@@ -3955,3 +3955,92 @@ seed 정책도 그대로다. 조건 내부 메모리 누적과 seed 통제는 �
 [11.14절 인계 기록](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#1114-2026-10-06-실행-코드-재검토와-작업-세션-인계)에 결과와 한계를 남겼다.
 현재 v2 평가 0/1200, GPU 재로딩 실측 및 65536 이상의 OOM 해결은 미검증이다.
 이번 재검토에서는 생성 실패 직후 마지막 부분 결과도 채점하도록 보완했다.
+
+#### 2026-10-06: v2 GPU 실행 결과 — 초기화 확인, 302/1200 후 OOM
+
+사용자가 지정한 `gpt-6-luna`/medium tester 1명에게 verify 실행을 위임했다.
+실험 후보는 `df6dd7783d05573961c5ad1d09e0e8840fcc9eb0`, runner SHA-256은
+`717502ed93ba472936939740d51a91484cc68559eabfe265507184fb3bb149ea`다.
+입력·prompt·gold·adapter·train·validation·선정자료의 7개 hash를 확인했다.
+메인은 종료 후 원 오류, receipt, 집계와 GPU 프로세스 부재를 대조했다.
+
+RTX A6000 1장, 기존 native 환경에서 위 `run --config` 명령을 실행했다.
+환경 기록(`preparation-environment.json`)은 Python 3.12.13, torch 2.14.1,
+transformers 4.56.2, unsloth 2026.9.14, unsloth-zoo 2026.9.9,
+trl 0.22.2, peft 0.21.2, bitsandbytes 0.50.2다.
+데이터는 `data/processed/cc-source-candidates-20260928-v5/decision-candidates/`
+아래 train/validation이며, 평가에는 동결된 validation 100건을 사용했다.
+학습·test500 사용·생성 설정 변경은 없었다. 원천 라벨은 미검수 상태다.
+
+실행 구간은 2026-10-06 14:48:58–17:47:06 KST다. 조건별 receipt의 시각은 UTC다.
+
+| adapter 상한 | worker PID | 시작 UTC | 종료 UTC | exitcode | 생성 완료 |
+| --- | ---: | --- | --- | ---: | ---: |
+| 128 | 484755 | 05:48:58.330786 | 06:06:43.497836 | 0 | 100 |
+| 512 | 494492 | 06:06:43.505158 | 07:05:48.766071 | 0 | 100 |
+| 2048 | 550012 | 07:05:48.772973 | 08:42:35.038615 | 0 | 100 |
+| 65536 | 642121 | 08:42:35.045667 | 08:47:05.855018 | 1 | 2 |
+
+네 프로세스 모두 로드 전 PyTorch allocated/reserved는 0이었다.
+로드 후 allocated 12,909,326,336 B, reserved 12,947,816,448 B로 동일했다.
+이전 worker 종료 후 다음 worker가 시작했으며 실행 구간이 겹치지 않는다.
+이는 실행된 네 조건의 모델 재로딩 증거이며 장치 전체 VRAM이 0이라는 뜻은 아니다.
+
+| adapter 상한 | TP | FN | FP | TN | uncertain | invalid | pending |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 0 | 1 | 0 | 0 | 0 | 99 | 0 |
+| 512 | 4 | 10 | 2 | 18 | 0 | 66 | 0 |
+| 2048 | 19 | 21 | 11 | 33 | 0 | 16 | 0 |
+| 65536 | 2 | 0 | 0 | 0 | 0 | 0 | 98 |
+
+strict/semantic 집계는 동일하다. 2048조건의 원천 라벨 일치는 52/100건이다.
+65536의 2건은 모두 양성이며 해당 조건의 전체 성능을 나타내지 않는다.
+adapter/130000·context-minus-input 및 base의 6조건은 각각 100건 모두 pending이다.
+전체는 완료 302건 + OOM 1건 + 미시도 897건이다. OOM은 pending에 포함되며
+FN/invalid로 채점하지 않는다. `confusion-matrices.json`의 complete는 false다.
+
+65536조건의 세 번째 입력 `cc-8745b2417b18ebf598e0a8c4`에서
+`inplace_eager_attention_forward`의 FP32 softmax가 13.05GiB를 요청했으나
+여유는 13.01GiB였다. GPU 총 47.39GiB, 해당 프로세스 사용 34.26GiB로 기록됐다.
+기존 v1과 같은 입력·할당 실패가 조건별 새 프로세스에서도 발생했다.
+초기화 요구 충족과 OOM 해결은 별개이며, 첫 오류에서 전체 순회를 중단했다.
+자동 재시도·조건 건너뛰기·부분 조건 이어붙이기는 하지 않았다.
+
+산출물은 `outputs/cc-native-step100-validation100-fresh-process-20261006-v2/`에
+보존했다. `conditions/*-runtime.json`과 receipt, `adapter-65536-error.json`,
+`progress.json`, `error.json`, raw 302건, `confusion-matrices.json/.md`,
+`gpu-run.stdout.log`, `tracker.stdout.log`, `score-final-after-failure.stdout.log`가 근거다.
+최종 scorer는 exit 0이며, 마지막 2건도 집계됐다. v1의 302건과 합산하지 않는다.
+
+[W&B v2 evaluation run](https://wandb.ai/erad3254-looking-for-a-job/aegislm/runs/source-v2-evaluation-b7551d344cea1182)은
+로컬 로그에 302/1200 업로드와 Sync 완료, tracker exit 0이 기록됐다.
+`evaluation.wandb.json`의 complete는 기록 lifecycle 완료이며,
+`wandb-progress.json`은 generation-failed다. 전체 평가 성공을 뜻하지 않는다.
+실행 중 사용자가 crashed→running 표시 복구를 보고했지만 그 원인은 확정하지
+않았고, 원격 최종 state는 별도로 재조회하지 않았다.
+
+후속 GPU 실험은 미실행이다. 실패 825token 및 최장 980token 입력에 대한
+prefill 메모리 분리 검증 등은 별도 조건으로 계획해야 한다.
+
+#### 2026-10-06: base 단독 평가 착수
+
+사용자가 adapter의 OOM 이후 같은 조건으로 base만 우선 실행하도록 지시했다.
+설정은 `configs/cc_native_base_validation100_fresh_process_v1.json`, 출력은
+`outputs/cc-native-base-validation100-fresh-process-20261006-v1/`이다.
+v2와 달라지는 설정 값은 experiment_id, output_dir, models 세 개뿐이다.
+같은 100건, 여섯 상한과 순서, native sampling/EOS, timeout 없음,
+모델×상한별 새 프로세스, 첫 실행 오류 시 중단 규칙을 유지한다.
+계획은 600회이며 새 prepare에서 생성한 동결 입력과 7개 hash를 v2와 대조한다.
+기존 adapter 결과를 덮어쓰거나 부분 조건에 이어붙이지 않는다.
+
+동일한 Luna tester에게 verify 실행을 위임한다. 생성기 코드는 변경하지 않고,
+W&B tracker가 명시된 모델 집합에 따라 600/1200회를 집계하도록 보완했다.
+누락·중복·다른 모델 조건은 계속 거부한다. 아래 명령은 기존 native 환경에서
+prepare, 별도 Harmony 환경에서 score, CPU tracker 초기 업로드 확인 후 실행한다.
+
+```bash
+experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python scripts/run_cc_native_validation100.py run --config configs/cc_native_base_validation100_fresh_process_v1.json
+```
+
+W&B tracker에도 위 base 전용 config와 `--wandb`를 명시한다. 결과와 성공 여부는
+실제 실행 산출물로 확인하며, 65,536 이상의 메모리 부족 해결을 가정하지 않는다.

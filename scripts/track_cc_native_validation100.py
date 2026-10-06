@@ -7,6 +7,7 @@ It sends only explicit safe projections, using the existing tracking lifecycle.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 import hashlib
 import json
 import os
@@ -108,8 +109,16 @@ def assessment(row: dict[str, Any], *, strict: bool) -> str:
     return label if label in LABELS[:3] else "invalid"
 
 
-def project_snapshot(report: dict[str, Any]) -> dict[str, Any]:
+def project_snapshot(
+    report: dict[str, Any], *, models: Sequence[str] = ("adapter", "base")
+) -> dict[str, Any]:
     """Keep pending, invalid and uncertain separate; never project raw outputs."""
+    if (
+        not models
+        or len(set(models)) != len(models)
+        or not set(models) <= {"adapter", "base"}
+    ):
+        raise ValueError("Unexpected configured models")
     metrics: dict[str, Any] = {}
     groups = []
     for group in report["groups"]:
@@ -189,11 +198,21 @@ def project_snapshot(report: dict[str, Any]) -> dict[str, Any]:
                 "cases": cases,
             }
         )
-    if len(groups) != 12 or len({g["prefix"] for g in groups}) != 12:
-        raise ValueError("Expected 12 unique model/budget groups")
+    expected = {
+        (model, str(budget))
+        for model in models
+        for budget in (128, 512, 2048, 65536, 130000, "context-minus-input")
+    }
+    if (
+        len(groups) != len(expected)
+        or {(g["model"], g["budget"]) for g in groups} != expected
+    ):
+        raise ValueError("Expected configured model/budget groups exactly once")
     metrics["evaluation/completed"] = sum(g["completed"] for g in groups)
-    metrics["evaluation/planned"] = 1200
-    metrics["evaluation/complete"] = metrics["evaluation/completed"] == 1200
+    metrics["evaluation/planned"] = 100 * len(expected)
+    metrics["evaluation/complete"] = (
+        metrics["evaluation/completed"] == metrics["evaluation/planned"]
+    )
     projected = {"metrics": metrics, "groups": groups, "case_columns": CASE_COLUMNS}
     validate_wandb_payload(projected)
     return projected
@@ -214,7 +233,7 @@ def main() -> None:
     load_dotenv(REPO / ".env", override=False)
     config = read(args.config)
     root = REPO / config["output_dir"]
-    project_snapshot(read(root / "confusion-matrices.json"))
+    project_snapshot(read(root / "confusion-matrices.json"), models=config["models"])
     outbound_config = safe_config(config, read(root / "prepared.json"))
     payload = json.dumps(outbound_config, sort_keys=True, separators=(",", ":"))
     base = build_tracking_receipt(
@@ -259,8 +278,9 @@ def main() -> None:
             digest = hashlib.sha256(text.encode()).hexdigest()
             if digest != last_digest:
                 report = json.loads(text)
-                projected = project_snapshot(report)
+                projected = project_snapshot(report, models=config["models"])
                 completed = projected["metrics"]["evaluation/completed"]
+                planned = projected["metrics"]["evaluation/planned"]
                 log_wandb_payload(run, projected["metrics"], step=completed)
                 update_wandb_summary(run, projected["metrics"])
                 charts: dict[str, Any] = {}
@@ -290,13 +310,19 @@ def main() -> None:
                     {
                         "status": "online",
                         "scored_completed": completed,
-                        "planned": 1200,
+                        "planned": planned,
                         "snapshot_sha256": digest,
                         "charts_logged": sorted(charts_logged),
                         "tracking": reference,
                     },
                 )
-                print("UPLOADED", completed, "/1200", reference["run_url"], flush=True)
+                print(
+                    "UPLOADED",
+                    completed,
+                    f"/{planned}",
+                    reference["run_url"],
+                    flush=True,
+                )
                 last_digest = digest
                 if report["complete"]:
                     finish_with_tracking_receipt(claim, reference, finish_active_wandb)
@@ -304,7 +330,8 @@ def main() -> None:
                         root / "wandb-progress.json",
                         {
                             "status": "completed",
-                            "scored_completed": 1200,
+                            "scored_completed": completed,
+                            "planned": planned,
                             "tracking": reference,
                         },
                     )

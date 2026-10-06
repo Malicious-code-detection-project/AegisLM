@@ -77,7 +77,11 @@ base/adapter20호출을 마쳤습니다. adapter는2,048/65,536/남은 최대 �
 사항의 학습·품질 평가와는 다릅니다. 과거 vLLM 성공 사례와의 동일 조건 비교는 미검증입니다.
 2026-10-06 코드 감사에서 생성 상한을 바꿀 때 모델을 다시 로드하지 않았음을 확인했습니다.
 모델×상한마다 새 프로세스로 평가하도록 수정하고 입력 준비·CPU 검증을 마쳤습니다.
-기존 302건은 보존했으며 새 GPU 평가는 아직 실행하지 않았습니다.
+이후 v2 GPU 평가에서 조건별 프로세스 종료·재로딩을 실측했습니다.
+adapter의128/512/2048조건 각100건과65536조건2건을 완료한 뒤,
+같은825token 입력에서 CUDA OOM으로 중단됐습니다. 새302건은 기존v1과
+별도로 보존했으며, base와 나머지 상한은 미실행입니다. 초기화 요구는 실행된
+4조건에서 확인했지만 메모리 부족은 해결되지 않았습니다.
 [조건별 초기화 감사](docs/GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#1113-2026-10-06-생성-상한-변경-시-모델-재로딩-여부-감사와-수정)에 근거와 제한을 기록합니다.
 현재 명령과 결과는
 [v5 판단 학습 실행 안내](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-02-v5-decision-only-execution)에 기록합니다.
@@ -237,6 +241,7 @@ Project NuriLab 저장소 수정, 런타임 연결, 통합 검증은 Project Nur
 - `docs/PHASE_D_EXIT_CRITERIA.md` - Phase D 완료 조건과 Phase E 착수 gate
 - `docs/PHASE_E_TEAM_ONBOARDING.html` - Phase E 이슈 처리와 팀 교육 주제 인포그래픽
 - `docs/FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획
+- [B200 재현 레시피](docs/B200_REPRODUCTION_RECIPE.md) - 동결 데이터 이관, 100-step 재학습, base·adapter의 동일 100건 평가
 - `docs/PR_DESCRIPTION_TEMPLATE.md` - PR 본문 작성 템플릿
 - `docs/QUALITY_GATES.md` - 코드 변경 PR 검사 기준
 - `docs/TEST_CRITERIA.md` - Phase C 테스트 기준과 평가 레퍼런스

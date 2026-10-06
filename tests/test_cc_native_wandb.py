@@ -68,6 +68,46 @@ def test_pending_is_not_invalid_and_semantic_errors_remain_visible():
     assert metrics["evaluation/complete"] is False
 
 
+def test_base_only_tracking_requires_explicit_model_selection():
+    data = snapshot()
+    data["groups"] = [g for g in data["groups"] if g["model"] == "base"]
+    with pytest.raises(ValueError, match="configured model/budget groups"):
+        project_snapshot(data)
+    metrics = project_snapshot(data, models=["base"])["metrics"]
+    assert metrics["evaluation/completed"] == 6
+    assert metrics["evaluation/planned"] == 600
+    assert not metrics["evaluation/complete"]
+    assert not any("/adapter/" in key for key in metrics)
+    for group in data["groups"]:
+        group["completed"], group["pending"] = 100, 0
+        group["semantic_matrix"] = [[0, 100, 0, 0], [0, 0, 0, 0]]
+        group["strict_matrix"] = [[0, 0, 0, 100], [0, 0, 0, 0]]
+        group["rows"] = [{**group["rows"][0], "id": f"cc-{i:03x}"} for i in range(100)]
+    metrics = project_snapshot(data, models=["base"])["metrics"]
+    assert metrics["evaluation/completed"] == 600
+    assert metrics["evaluation/complete"]
+
+
+@pytest.mark.parametrize("change", ["missing", "duplicate", "unexpected_model"])
+def test_base_only_tracking_rejects_incomplete_or_mixed_conditions(change: str):
+    data = snapshot()
+    data["groups"] = [g for g in data["groups"] if g["model"] == "base"]
+    if change == "missing":
+        data["groups"].pop()
+    elif change == "duplicate":
+        data["groups"][-1] = deepcopy(data["groups"][0])
+    else:
+        data["groups"][0]["model"] = "adapter"
+    with pytest.raises(ValueError, match="configured model/budget groups"):
+        project_snapshot(data, models=["base"])
+
+
+@pytest.mark.parametrize("models", [[], ["base", "base"], ["unknown"]])
+def test_tracking_rejects_invalid_model_selection(models: list[str]):
+    with pytest.raises(ValueError, match="configured models"):
+        project_snapshot(snapshot(), models=models)
+
+
 def test_matrix_count_mismatch_or_wrong_cohort_is_rejected():
     data = snapshot()
     data["groups"][0]["semantic_matrix"][0][0] = 1
