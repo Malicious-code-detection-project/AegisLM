@@ -2411,3 +2411,1547 @@ mask·정밀도·loss 산출을 대조해 비교 가능한 loss를 확보하고,
 그 결과를 남긴 다음 다른 데이터셋의 학습 비교를 진행한다. 이번 보고서에서
 추가 학습·전체 validation 생성·test500 또는 다른 데이터셋 학습을 완료했다고
 주장하지 않는다.
+
+### 2026-10-04: raw-input-output-prefix9tokens-review
+
+사용자는 원본 로그와 실제 입력·출력의 차이를 전반적으로 확인하도록 요청했다.
+CPU-only로 v5 canonical/export11,500건의 형식, 원 v7 base development100의
+저장 예측, 같은 validation2건의 과거16개+새4개 출력 원문을 대조했다.
+원 로그와 token count/종료 이유, 추가 forward의 입력 hash/수치도 확인했다.
+새 GPU 학습·추론은 수행하지 않았으며 test 파일의 형식 확인을 test 품질 평가로
+부르지 않는다. 상세 원문은 Git 제외 경로
+`outputs/cc-raw-input-output-review-20261004-v1/`의
+`input-output-side-by-side.html`, 요약은 `review.md`, 기계 결과는 `review.json`,
+재현 script/log는 `review.py`/`review.log`에 보존한다.
+
+#### 실제로 전달된 입력
+
+11,500건 모두 canonical과 decision export가 일치했다. user 필드는
+scope(target_cwe/boundary)와 source_code이며 명시적 정답 필드는 없다.
+train/validation은 system/user/assistant, test challenge는 system/user다.
+분할 간 ID·동일 코드 겹침은0이었으며 CVE/그룹/near-clone 검사를 새로 한 것은 아니다.
+이는 구조·입력 일치 확인이며 미검수 원천 라벨의 의미를 검증한 결과는 아니다.
+
+| 비교 입력 | 원천 정답 | bare prompt | final-prefill prompt | teacher-forcing 전체 | 감독 tokens |
+| --- | --- | ---: | ---: | ---: | ---: |
+| file_asynch_write / CWE-252 | present | 293 | 302 | 309 | 7 |
+| zone_set_layer / CWE-190 | not_observed | 235 | 244 | 253 | 9 |
+
+두 source_code를 JSON으로 파싱하면 실제 개행12/6개이며 literal backslash-n은
+0이었다. JSON 직렬화에서 보이는 이스케이프를 코드의 이중 인코딩으로 판정하지
+않는다. 두 사례의 함수·CWE는 canonical·user payload·실제 input IDs가 일치했다.
+모델이 코드가 없다고 출력했지만 실제 입력에는 해당 C 코드가 있었다.
+
+prefill은 bare 입력에 다음9토큰만 붙인다. 정답 JSON은 붙이지 않는다.
+
+```text
+<|channel|>analysis<|message|><|end|><|start|>assistant<|channel|>final<|message|>
+```
+
+loss용 전체 시퀀스는 prefill+정답 JSON+return이다. 재생성한309/253개의 input IDs
+SHA256이 기존 forward 로그의 입력 hash와 일치했다. validation loss의 teacher-
+forcing 입력과 실제 자유 생성 입력을 동일한 것으로 해석하지 않는다.
+
+#### 원문 출력의 실패 유형
+
+25step validation은 prediction_loss_only=true의 loss 계산이었다.
+그100건의 자유 생성 답변은 저장하지 않았으며, 새 final100 adapter의 저장된
+자유 생성 원문은2입력×2시작 방식의4개다. 이번 검사는 이4개를 모두 읽었지만
+validation100건 전체 출력 실패 유형을 확인한 결과는 아니다.
+
+새 bare 출력은 실제 C 코드와 다른 Python 함수/int main을 언급하고, 코드가
+제공되지 않았다고 주장하거나 취약성 대신 함수의 존재 여부를 반복했다.
+함수가 없다는 동일 문장은 두 사례에서10/23회 반복됐다. 이는 JSON parsing
+실패 이전에 관측되는 grounding/작업 의미의 실패다. 생성 원문은1,272/1,278
+토큰 존재하며 raw_output만 final 미생성 때문에 비어 있다.
+
+새 final-prefill은 같은2건에서 JSON/schema·원천 라벨 일치2/2, 실제 return으로
+7/9토큰에 종료했다. final header는 입력에서 제공했고 모델이 생성한 것으로
+집계하지 않는다. 같은 adapter 내의 시작 형식 차이가 출력 동작에 영향을
+주는 것은 확인됐으나 두 건만으로 코드 판단 정확성을 일반화하지 않는다.
+
+과거 adapter는65,536 상한에서 analysis275/287회·final82/69회의 제어 구조
+반복 후 시간 제한에 도달했다. 새 bare는 analysis marker1회 안에서 본문이
+반복되는 형태다. 두 run의 반복 유형도 구분해야 한다. 과거 base 두 번째
+사례는 EOS가 나왔어도 final에 설명·후속 message가 섞여 JSON이 유효하지
+않았다. 요청과 다른 CWE 및 가짜 tool 호출 텍스트도 있었으며, 실제 inference
+도구가 실행된 결과가 아니다. 종료 토큰과 JSON/판단 성공을 별도로 본다.
+
+원 base100건의128token 도달/final0/EOS0, 새 실행 로그의 생성4개 이벤트,
+네 validation metric 지점 및 forward 성공 로그/JSON 일치를 재확인했다.
+forward 로그는 loss와 빈 logits shape만 남겨 출력 token이나 수동 CE를
+검산할 수 없다. 이번 검사는 CUDA initialized=false/model load=false/
+optimizer0, 종료 코드0이며 원 파일 hash는 전후 같았다.
+
+### 2026-10-04: generation-failure-vs-runtime-qwen-gptoss-analysis
+
+사용자는 반복·시간 초과를 모델의 생성 품질 한계로 해석할 수 있는지,
+confusion matrix로 평가하면 되는지, 더 긴 context 모델이 필요한지,
+Qwen3-Coder-Next-80B와 GPT-OSS-20B의 차이가 무엇인지 질문했다.
+이번 분석은 앞 두 절의 보존 결과와 아래 공식 모델 자료를 대조한 것이다.
+새 GPU 실행·모델 다운로드·재학습·평가 metric 구현은 하지 않았다.
+
+#### 관측과 원인 판정
+
+반복·입력과 무관한 함수 생성·final 미생성은 실제 생성 품질 실패다.
+그러나 품질 실패는 학습 objective/추론 시작 경계/런타임 오류가 드러나는
+증상이기도 하므로 학습 문제와 생성 품질 문제를 상호 배타적으로 분류하지 않는다.
+현상 기록과 원인 판정을 구분한다.
+
+- 실패한 새 bare 입력은235/293토큰이고 생성량은1,278/1,272토큰이다.
+  context131,072 또는 생성 상한65,536에 도달한 것이 아니라 약300초의
+  wall-clock 제한에 도달했다. 더 긴 context가 이 사례를 해결한다는 근거는 없다.
+- 같은 adapter·코드에서 gold-free final 시작 접두부9토큰을 추가하면
+  JSON/schema·원천 라벨 일치2/2 및 native return7/9토큰 종료가 관측됐다.
+  시작 경계에 대한 민감성은 확인됐지만 판단 정확도의 일반화는 미검증이다.
+- 새 학습은 final JSON+return만 감독하고 analysis 본문·final header는
+  감독하지 않았다. bare 자유 생성은 analysis 및 채널 전환을 모델이 생성해야
+  하므로 학습에서 측정한 응답 조건과 다르다. 이 경계 차이는 원인 후보이며,
+  공식 final-only 마스킹 자체를 결함으로 판정한 것은 아니다.
+- 동일 가중치·동일 입력의 train/eval forward에서도 일부 loss가 크게 달랐다.
+  train 최장 사례는0.010108 대8.670376이다. mode와 gradient 상태를 함께
+  바꾼 검사이고 수동 CE 검산이 없어 어느 경로가 맞는지는 아직 모른다.
+  따라서 학습/추론 실행 경로가 정상이라는 전제를 아직 확보하지 못했다.
+
+#### 공식 모델 차이와 과거 비교의 제한
+
+| 항목 | GPT-OSS-20B | Qwen3-Coder-Next |
+| --- | --- | --- |
+| 주된 설계 | 범용 reasoning/agentic 모델 | coding agent·로컬 개발 특화 |
+| 총/토큰당 활성 파라미터 | 약21B/3.6B | 약80B/3B |
+| 기본 출력 경계 | Harmony analysis/final 및 turn 종료 | non-thinking, ChatML assistant 본문 |
+| 모델 context 상한 | 131,072 | 262,144 |
+| 레이어/attention | 24, sliding/full 교대 | 48, Gated DeltaNet/Gated Attention 혼합 |
+
+출력 형식과 post-training의 차이는 두 실행의 현상 차이를 설명할 후보다.
+공식 Qwen 카드는 non-thinking만 지원한다고 명시하며 공식 template은
+`<|im_start|>assistant` 뒤 본문을 생성한다. GPT-OSS는 reasoning low도
+지원하지만 그것을 analysis 미생성 보장으로 해석하지 않는다.
+총 파라미터 비율이나 context 비율만으로 코드 판단 성능 차이를 설명하지 않는다.
+
+이전 Q1R10/Q1R11은 BF16 LoRA/LLaMA-Factory/qwen3_nothink/B2002장이고
+현재 GPT-OSS는 pinned Unsloth BnB4bit QLoRA/RTX A6000 1장이다.
+데이터도 이전 decision/evidence 폴더와 현재 v5 판단 후보가 다르다.
+이전 blind500 중복 감사 결과 때문에 과거의 높은 판단 점수를 독립적인
+일반화 기준으로 사용하지 않는다. 다만 누수 문제만으로 현재 bare의 반복과
+final 미생성을 설명할 수 있는 것도 아니다. 과거 보고서는
+`outputs/source-v2-unsloth-full-comparison-20260927-v1/framework-comparison-20260928/q1r10-q1r11.md`
+및 `outputs/q1r10-q1r11-dataset-audit-20260928/summary.md`로 연결한다.
+
+공식 출처(2026-10-04 열람, 현재 main의 설명이며 설치 버전 변경 없음):
+
+- [OpenAI GPT-OSS 소개·구조](https://openai.com/index/introducing-gpt-oss/)
+- [공식 GPT-OSS-20B model card](https://huggingface.co/openai/gpt-oss-20b)
+- [공식 GPT-OSS config](https://huggingface.co/openai/gpt-oss-20b/blob/main/config.json)
+- [공식 Harmony renderer](https://github.com/openai/harmony)
+- [공식 Qwen3-Coder-Next model card](https://huggingface.co/Qwen/Qwen3-Coder-Next)
+- [공식 Qwen chat template](https://huggingface.co/Qwen/Qwen3-Coder-Next/raw/main/chat_template.jinja)
+
+#### 평가 방법과 다음 원인 분리
+
+기존 평가 계약은 변경하지 않았다. 후속 보고에는 유효한 판단의 TP/TN/FP/FN과
+함께 전체 평가 건수, 판단 성공률, JSON/schema 실패율, timeout 비율,
+실제 생성 토큰 수·지연 시간을 보존하는 것이 적절하다. 출력 실패를
+not_observed로 강제 변환하거나 실패 건을 분모에서 빠뜨리지 않는다.
+실제 라벨2종×예측 present/not_observed/출력 실패의2×3 표는 실패 건수를
+보여줄 수 있지만, 이것을 표준 이진 confusion matrix와 동일하게 부르지 않는다.
+유효 출력만 계산한 지표에는 coverage와 조건부 계산임을 명시하고,
+전체 표본에서 실패를 오답으로 세는 성공률도 함께 보고한다.
+현재 두 사례의 결과는 원천 라벨 일치이며 검수된 취약성 정확도가 아니다.
+
+다음 실험의 우선순위는 다음과 같다. 이번에 실행한 결과가 아닌 제안이다.
+
+1. 고정 입력·가중치에서 causal mask/precision/forward/loss 경로의 일관성을
+   확인한다. train/eval 차이를 일반화 성능으로 오인하지 않도록 한다.
+2. 같은 고정 development 집합으로 base/adapter×bare/final-prefill을 비교한다.
+   입력 코드·CWE·출력 계약은 같게 두고 모델별 native 형식을 유지한다.
+   생성 cap·시간 cap 및 실패 처리도 동결한다. prefill은 gold를 포함하지 않는다.
+3. 정상 출력에서도 판단 오류가 높고 실행 경로 문제가 배제되면 동일 v5의
+   protocol을 확정한 test500에서 Qwen과 비교한다. 이때 모델 교체의 이유는
+   관측된 코드 판단/종료/형식 성능이며 context 길이 개선으로 단정하지 않는다.
+
+### 2026-10-04: context-window-max-131072-generation-experiment
+
+사용자는 문맥 최대 길이를 확인한 뒤 최대 토큰 길이 실험을 요청했고,
+실수로 중단한 turn을 이어서 진행하도록 지시했다. 실험명은
+`context-window-max-131072 (max-new-tokens=context-minus-input)`이다.
+131,072는 입력과 출력을 합친 문맥 한도이므로 실제 생성 상한은 각 입력을
+직렬화한 토큰 수를 뺀 값이다. 기존65,536보다 생성 상한만 늘리며,
+runtime context131,072·greedy·batch1·low reasoning·native EOS 및
+300초 guard는 그대로 유지한다. 생성 상한 설정과 실제 생성량을 구분한다.
+
+#### 실행 전 계획과 검사
+
+대상은 같은 validation2건에서 pinned base와 최신 final100 tutorial adapter의
+bare-assistant/final-prefill 시작이다.2모델×2시작 방식×2입력의8개 생성이며
+새 학습·test500·데이터셋 변경·모델 다운로드·패키지 업그레이드는 없다.
+이전 comparison10행을 보존하고 새4행을 별도 산출물에서 추가한다.
+base/final-prefill은65,536의 이전 저장 비교가 없으므로 신규 대조 조건이다.
+
+| 입력 | 시작 | 입력 tokens | 실제 max_new_tokens |
+| --- | --- | ---: | ---: |
+| cc-55fa921bc64a64071c4dd1c9 | bare-assistant | 293 | 130,779 |
+| cc-b8bec7f8c250c406ad4ed545 | bare-assistant | 235 | 130,837 |
+| cc-55fa921bc64a64071c4dd1c9 | final-prefill | 302 | 130,770 |
+| cc-b8bec7f8c250c406ad4ed545 | final-prefill | 244 | 130,828 |
+
+원 입력 ID·token IDs 및 최신 학습 config/source/package/GPU/adapter digest를
+동결본과 대조했다. 새 예산 계산, 경계 초과·gold 입력 거부 및 실제
+model.generate의 인자 전달을 검증한 CPU 검사14건이 통과했고 Ruff check도
+통과했다. 사전 GPU는 RTX A6000,49,140MiB 중209MiB 사용,compute process0였다.
+설정·script·검사는 Git 제외 경로
+`outputs/cc-context-window-max-131072-20261004-v1/`의
+`config.json`, `run.py`, `test_context_max.py`에 보존하며 결과는 `run-v1/`이다.
+기존 학습 구현과 원 산출물을 수정하지 않는다.
+
+실행 명령:
+
+```bash
+experiments/training-loop-debug/.venv/bin/python -u \
+  outputs/cc-context-window-max-131072-20261004-v1/run.py --stage prepare
+experiments/training-loop-debug/.venv/bin/python -u \
+  outputs/cc-context-window-max-131072-20261004-v1/run.py --stage run
+```
+
+질문은 생성 상한만 높여 동일 입력의 종료·JSON/schema가 바뀌는지다.
+300초에 먼저 도달하면 실제 최대 길이까지 생성할 수 있는지 또는65,536 이후
+회복하는지는 미검증으로 남긴다. 같은 실패가 반복돼도 자동으로 시간 제한을
+늘리거나 학습을 재시작하지 않는다. 미검수 원천 라벨2건으로 판단 품질을
+합격 처리하지 않는다. 실행 결과는 아래에 추가한다.
+
+#### 관측에 따른 추가 base 대조 계획
+
+새 base/bare는68/118토큰에서 native return으로 종료해 이전 저장 결과의
+1,579/2,534토큰과 달랐다. 둘 다 기존65,536 상한 미만에서 달라졌으므로
+이 차이를 상한 증가로 인한 품질 개선으로 판정하지 않는다.
+같은 base를 새 프로세스에 한 번 로드하고 각 동일 입력에서65,536과
+context-minus-input을 순차 호출해 model.generate의 max_new_tokens 인자만
+변경하는4개 생성 대조를 추가한다.300초 제한과 입력·EOS·그 외 kwargs는 같다.
+대조 script는 같은 Git 제외 폴더의 `paired_caps.py`이며, 원 실험 script와
+결과를 덮어쓰지 않고 `run-v1/base-paired-caps/`에 저장한다.
+인자 하나만 변경하는 CPU 검사를 추가한 총15건과 Ruff check가 통과했다.
+이 대조는 base 결과 차이를 설명하기 위한 것이며 어댑터 재학습은 아니다.
+
+#### 완료 결과와 해석
+
+원 최대 상한 실험8개 생성과 추가 base 대조4개 생성이 모두 종료 코드0으로
+완료됐다. 모든 요청의 입력+설정된 생성 예산은 정확히131,072다.
+실제 생성량은 아래와 같으며 어떤 요청도 토큰 상한에 도달하지 않았다.
+
+| 모델 | 시작 | 실제 생성 cap | JSON/schema | native return | 시간 제한 | 실제 생성 tokens |
+| --- | --- | --- | --- | --- | --- | --- |
+| base | bare-assistant | 130,779/130,837 | 2/2 | 2/2 | 0/2 | 68/118 |
+| base | final-prefill | 130,770/130,828 | 1/2 | 2/2 | 0/2 | 43/7 |
+| tutorial final100 adapter | bare-assistant | 130,779/130,837 | 0/2 | 0/2 | 2/2 | 1,277/1,284 |
+| tutorial final100 adapter | final-prefill | 130,770/130,828 | 2/2 | 2/2 | 0/2 | 7/9 |
+
+adapter/bare 두 사례의 latency는300,344.596/300,255.856ms였다.
+adapter/final-prefill은1,886.022/2,336.491ms로 완료됐다.
+bare 생성 ID의 공통 길이까지가 이전65,536 출력과 두 사례 모두 완전히 같았다.
+이전1,272/1,278토큰과 새1,277/1,284토큰의 차이는 시간 제한까지 처리한
+분량 차이이며, 관측된 공통 구간의 생성 의미·반복 유형은 바뀌지 않았다.
+final-prefill의 전체 생성 IDs도 이전65,536 출력과 같다. 정답 JSON을 입력에
+넣지 않았고 native return을 실제 생성했다. 원천 라벨 일치2/2는 검수된
+보안 정확도 또는 전체 validation/test 품질 합격이 아니다.
+
+base/bare의 최종 판단은 첫 사례uncertain, 둘째not_observed다.
+base/final-prefill은 첫 사례에서 final 접두부 뒤 설명문과 새 final header를
+생성해 JSON 파싱 실패했고, 둘째는uncertain이다. 따라서 EOS2/2를 판단
+성공2/2로 읽으면 안 된다. 첫 final에서 실패한 원문을 뒤의 JSON으로
+교체하거나 실패 사례를 평가에서 제외하지 않았다.
+
+추가 base의 동일 프로세스 대조:
+
+| 입력 | cap65,536의 실제 tokens | 최대 cap의 실제 tokens | 최종 JSON 비교 |
+| --- | ---: | ---: | --- |
+| cc-55fa921bc64a64071c4dd1c9 | 38 | 68 | 둘 다 assessment=uncertain |
+| cc-b8bec7f8c250c406ad4ed545 | 114 | 118 | 둘 다 assessment=not_observed |
+
+상한 인자 하나만 바꾼 대조에서 생성 본문의 token IDs는 달랐지만 최종
+raw_output은 두 사례 모두 같았다. 이 실험은 각 조건1회라 실행 순서나
+수치적 비결정성 등과 cap의 경로 영향을 완전히 분리하지 못한다.
+이전 원 base65,536의1,579/2,534토큰은 이번65,536 대조에서 재현되지 않았다.
+이번 base worker는 tutorial 경로와 맞춰 forced_eos=None 및 min_new_tokens/
+min_length=0을 명시하며 이전 base worker는 이 설정을 별도 명시하지 않았다.
+이 점과 실행 경로의 재현 문제를 기록하고 과거 대비 차이를 cap 증가로
+인한 품질 개선으로 귀속하지 않는다. 추가 대조 두 조건끼리는 이들을 같게
+두고 실제 model.generate의 max_new_tokens만 변경했다.
+
+**이 두 입력과300초 조건에서는 생성 상한을 최대화해도 adapter의 bare
+반복/종료 실패가 개선되지 않았다.** context 설정 자체는 이전에도131,072였다.
+이번에 늘린 것은 남은 문맥만큼의 max_new_tokens이며 입력 길이나 학습 길이는
+늘리지 않았다.65,536 이후까지 실제 생성하지 않았으므로 그 구간의 동작이나
+최대 문맥 생성 완주 가능성은 미검증이다. 이 결과만으로 모델 고유 한계 또는
+특정 학습 코드 결함을 확정하지 않는다.
+
+#### 재검산과 보존
+
+CPU 감사 `audit.py`가12개 원본 출력의 token decode·input 일치·실제 cap,
+최대 상한4조건의 평가 재계산, native EOS/시간 종료 및 원본 해시를 대조했고 종료 코드0,
+audit_pass=true/CUDA initialized=false였다. 원 comparison10행은 그대로
+유지되고 새4행을 별도 comparison에 추가했다. source bindings와 adapter
+SHA256 `ca6f564955673f5d819db6a68497b23adb01a363cbbc5a295629674b8acdf32b`는
+전후 같았다. optimizer_steps=0/test_used=false다.
+
+결과 위치는 `outputs/cc-context-window-max-131072-20261004-v1/run-v1/`이다.
+
+- `context-window-max-131072-comparison.md`, `comparison.json`: 새4조건 표와
+  기존10행+새4행의 전체 표.
+- `base/predictions.jsonl`, `tutorial_adapter/predictions.jsonl`: 최대 상한의
+  전체8개 raw generation·입력/출력 IDs·종료·latency/메모리 기록.
+- `base.log`, `tutorial_adapter.log`: 실제 상한이 표시된 호출 및 종료 로그.
+- `base-paired-caps/`: 추가4개 대조의 원 출력·설정·평가·최종 JSON 비교.
+- `base-paired-caps.log`: 추가 대조 실행 원 로그.
+- `post-run-audit.json`, `post-run-audit.log`: 재검산 결과와 원문 발췌.
+
+재검산 명령:
+
+```bash
+experiments/training-loop-debug/.venv/bin/python -u \
+  outputs/cc-context-window-max-131072-20261004-v1/paired_caps.py
+experiments/training-loop-debug/.venv/bin/python -u \
+  outputs/cc-context-window-max-131072-20261004-v1/audit.py
+```
+
+paired_caps.py는 GPU 대조 실행 명령이며 기존 출력 폴더가 있으면 덮어쓰지
+않고 중단한다. audit.py만 기존 결과를 읽어 재검산하는 CPU 경로다.
+
+### 2026-10-04: unsloth-original-max-new-tokens-131072-training
+
+**조건 정정(2026-10-04):** 사용자가 승인한 변경은 생성 상한 확대였지만,
+에이전트가 사전 동의 없이 외부 600초 제한을 추가했다. v2에는 compiler-off
+우회도 적용됐다. 아래 기록은 해당 조건에서 관측한 이력으로 보존하며,
+사용자가 요청한 “공식 튜토리얼에서 생성 상한만 변경한 재현”의 결과로
+간주하지 않는다. `max_time` 인자를 넣지 않았어도 외부 제한은 별도 조건 변경이다.
+이후 사용자는 학습과 생성 길이 모두 공식 튜토리얼 그대로인 새 실행을 요청했다.
+
+사용자는 이전 맞춤 종료 설정·prefill이 영향을 줬을 가능성을 비교하기 위해
+공식 튜토리얼을 거의 그대로 사용해 새로 학습하고 실험표 및 결과를 기록하도록
+요청했다. 이어서 **학습 길이는 원본 유지, 생성 상한만 최대화**를 선택했다.
+따라서 이 실험의 학습 max_seq_length는1,024이며131,072로 바꾸지 않는다.
+제목은 `unsloth-original-max-new-tokens-131072 (training-length-1024)`다.
+
+#### 사전 고정과 원본 대조
+
+기준 원본은 위에 보존한 Unsloth notebook commit
+`92e38e86308748d18fc4cd4b104c4c6d3db1d67e`의 Python 실행 셀이다.
+모델 alias/LoRA/formatter/SFTTrainer/SFTConfig/final-response mask 및
+trainer.train 호출은 원본 AST에서 추출했다. 변경은 원본 데이터의 로컬 고정본
+로드와 checkpoint/adapter 저장 경로뿐이며, 이를 역변환하면 학습 AST가
+정확히 같은지 검사했다. 기존 train/eval mask-signature 보정 helper나
+final-prefill·EOS 목록·forced_eos·min_new_tokens·sampling 값을 주입하지 않는다.
+native generate의 kwargs는 원본처럼 inputs, max_new_tokens, streamer뿐이다.
+관측용 callback/streamer는 로그·원 token IDs를 기록하며 학습 타깃을 바꾸지 않는다.
+공식 문서가 선택 사항으로 안내하는 학습 전 low/medium/high64-token 시연은
+별도로 실행하지 않고, 아래 동일 French 질문의 base 평가를 먼저 수행한다.
+
+| 항목 | 이번 값 |
+| --- | --- |
+| 원본 dataset | HuggingFaceH4/Multilingual-Thinking, train1,000 |
+| 고정 dataset revision | f423949d2726f5a5633ea10ac45bc1ea1e0de6e7 |
+| 학습 길이/steps | 1,024 / 30 |
+| batch/accumulation | 1 / 4 |
+| LoRA | 원본 r8/alpha16/dropout0, attention+MLP 목록 |
+| LR/warmup/optimizer | 원본2e-4/5/adamw_8bit |
+| schedule/weight decay/seed | 원본linear/.001/3407 |
+| formatter/mask | 원본 standardize_sharegpt/chat template/final response mask |
+| validation/W&B | 원본대로 eval dataset 없음/report_to=none |
+| 생성 조건 | 원본 French 수학 질문, medium/high, native EOS·sampling |
+| 생성 비교 | 원본64 vs131,072에서 실제 input tokens를 뺀 상한 |
+
+새 venv는 `experiments/unsloth-original-max-new-tokens-131072/.venv`이며
+원본 설치 셀과 같은 Transformers4.56.2/TRL0.22.2 및 호환
+huggingface-hub0.36.0을 설치했다. Torch·Unsloth 등 기존 패키지는 원 기존
+site-packages를 .pth로 읽으며 기존 venv를 수정하지 않는다. 이는 Colab OS까지
+같은 환경의 완전 재현은 아니다. 실제 package 버전은 새 manifest에 기록했다.
+새 컴파일 캐시는 실험 출력 폴더 아래로 분리한다. 원본 alias+load_in_4bit가
+설치 mapper에서 캐시된 bnb-4bit로 연결되는 것을 확인했다. 새 대형 모델을
+다운로드하거나 이전 adapter에서 계속 학습하지 않는다.
+
+실험 파일은 Git 제외 경로
+`outputs/unsloth-original-max-new-tokens-131072-20261004-v1/`에 있으며,
+실행 전 계획표는 `unsloth-original-max-new-tokens-131072-results.md`다.
+`original-training-cells.py`/`training-cells.py`/`manifest.json`에 원본 및 차이를
+보존했다. CPU 원본 대조·학습 길이·생성 인자 검사3건 및 Ruff check가 통과했다.
+초기 정적 검사에서 관측 wrapper의 미사용 로컬 변수 하나가 발견돼 제거한 뒤
+통과했으며 학습 호출·원본 recipe는 바꾸지 않았다.
+
+#### 실행 및 해석 계약
+
+별도 native base 평가→원본30-step 학습→저장 adapter의 새 프로세스 재로딩
+평가→표 갱신 순서다. 두 모델에 medium/high×64/최대의4조건씩 총8개 생성이다.
+추론 로딩 길이131,072는 생성 최대 문맥용이며 학습 길이 변경과 구분한다.
+decoder max_time 인자도 추가하지 않는다. 대신 각 generate의600초 외부
+wall-clock guard로 자원을 제한하고, 발생 시 streamer에 저장된 부분 출력과
+external_time_limit을 보존한다. 이를 native EOS 성공으로 집계하지 않는다.
+
+```bash
+experiments/unsloth-original-max-new-tokens-131072/.venv/bin/python -u \
+  outputs/unsloth-original-max-new-tokens-131072-20261004-v1/pipeline.py
+```
+
+이 실험은 원본 multilingual/French 수학 시연의 학습·생성 동작 확인이다.
+C/C++ v5 판단 데이터로 학습한 기존 adapter의 confusion matrix와 같은
+점수로 비교하지 않는다. 같은 튜토리얼 안의 base/adapter 및64/최대 상한을
+비교한다. 종료/final 출현·원문 의미·반복을 구분하며 EOS만으로 정답을
+판정하지 않는다. 원본 SFT의1,024-token truncation과 supervised label 수를
+기록하고 임의로 dataset을 필터링하거나 학습 길이를 늘려 성공시키지 않는다.
+실행 실패와 실제 미검증 범위도 아래 결과 및 표에 기록한다.
+
+#### 실행 중 발견한 로컬 런타임 차이
+
+| 실행 | 도달 지점 | 결과/조치 |
+| --- | --- | --- |
+| attempt1 | base 가중치 로드 전 | 기본 HF 캐시에 tokenizer만 있고 별도 workspace 캐시에 가중치가 있어 `checkpoint_files[0]`가 None인 로더 오류. optimizer 실행 없음 |
+| attempt2 | base 가중치 로드 성공, 첫 generate | GPT-OSS router의 TorchDynamo 컴파일 경로에서 `dict_keys_getitem`의 StopIteration. 출력·optimizer 실행 없음 |
+| attempt3 | base4조건 완료, 첫 train backward | TorchDynamo 전체 비활성화 후 uncompiled FlexAttention backward에서 Float/BFloat16 오류. optimizer step0, adapter 없음 |
+| 별도v2 | 동일 원본30-step 학습 | Unsloth 지원 compiler-off 경로로 학습 완료. 같은 경로의 base/adapter 비교를 별도 표에 기록 |
+
+원본 alias를 바꾸거나 모델을 추가 다운로드하지 않았다. 기존 두 캐시의
+동일 revision `093fba6992ef5a7152481afec0bdfca1ac486998` 파일을 출력 폴더의
+`native-hub`에 symlink로 모으고 `HF_HUB_CACHE`만 지정했다.
+`native-cache-links.json`에 원본 경로·크기를 남겼으며 가중치를 복제하지 않았다.
+attempt3에서는 설치 Torch2.10의 `torch/_dynamo/eval_frame.py`에서 지원하는
+`TORCHDYNAMO_DISABLE=1`을 import 전에 적용했다. 모델/LoRA/마스크/optimizer/
+EOS/sampler 학습·생성 호출의 AST는 그대로다. 이는 컴파일 실행 경로와 속도가
+다른 로컬 런타임 보정이므로 원본 Colab 전체 환경과 동일하다고 주장하지 않는다.
+
+실패 로그 `base.log`/`base-attempt2.log`, 각 pipeline-result, 이전 execution
+bindings, `run-attempt2.py` 및 생성된 compiler cache를 보존했다. 실패한
+inference 폴더도 별도 이름으로 옮겨 덮어쓰지 않았다. 원본 대조3건은
+attempt3 변경 이후에도 통과했다. 실제 재시도 명령은 다음과 같다.
+
+```bash
+experiments/unsloth-original-max-new-tokens-131072/.venv/bin/python -u \
+  outputs/unsloth-original-max-new-tokens-131072-20261004-v1/pipeline_attempt3.py
+```
+
+이는 실행 이력이며 같은 폴더에서 반복 실행하는 resume 명령이 아니다.
+기존 검증 기준대로 실패·완료 stage는 새 출력 경로 없이 덮어쓰지 않는다.
+
+attempt3의 base4조건은 원본64의 medium/high가 각각64토큰에서 잘렸고,
+최대 상한130,950의 medium은2,258토큰/native EOS/final(455.713초), high는
+2,966토큰/외부600초 제한/final 없음이었다. medium의 French 답변은 양의
+근만 제시해 실근3개 중 음의 근2개를 누락했다. 이 출력은 아래v2 표와
+실행 경로가 다르므로 학습 후 adapter와 직접 묶어 비교하지 않는다.
+
+#### 별도v2: 원본 학습 성공과 같은 런타임 비교
+
+설치 `unsloth_zoo/temporary_patches/gpt_oss.py`의
+`patch_GptOssAttention`에는 uncompiled FlexAttention backward의 dtype
+문제와 `UNSLOTH_COMPILE_DISABLE`일 때 stock attention으로 남기는 분기가
+있다. TorchDynamo만 끄는 대신 Unsloth 지원
+`UNSLOTH_COMPILE_DISABLE=1`을 import 전에 지정한 별도v2를 만들었다.
+원본 learning 호출의 AST 대조3건은 다시 통과했다. EOS/sampling/prefill과
+학습 길이·30step·batch1/accum4는 바꾸지 않았다. 이 compiler-off 경로는
+원본 Colab 전체 runtime 재현과 구분한다.
+
+새 경로는 `outputs/unsloth-original-max-new-tokens-131072-20261004-v2/`다.
+기존v1의 모든 실패 및 base 출력을 유지하며 원본 dataset 고정본과 모델
+캐시만 공유한다. 앞선 base 평가로 학습 전 기준을 마련한 뒤 v2 학습을
+먼저 실행하고, 새 프로세스로 v2의 동일 compiler-off base/adapter를
+비교한다. dataset과 질문·채점 기준을 결과에 맞춰 바꾸지 않는다.
+
+```bash
+experiments/unsloth-original-max-new-tokens-131072/.venv/bin/python -u \
+  outputs/unsloth-original-max-new-tokens-131072-20261004-v2/pipeline.py
+```
+
+| 학습 결과 | 실제 값 |
+| --- | --- |
+| 원본 입력/최종 trainer records | 1,000 / 933 |
+| native 전처리 제외 | 1,024-token truncation 후 응답 라벨 없는67건 자동 제외 |
+| 자체 추가 필터/수동 마스크 보정 | 없음 |
+| optimizer steps/epoch | 30 / 0.128617 |
+| 평균/마지막 step loss | 1.024378 / 0.6893 |
+| trainer runtime/로드·저장 포함 | 147.717 / 175.664초 |
+| peak reserved memory | 19,758MiB |
+| 실제 trainable parameters | 3,981,312 |
+| validation/W&B | 원본대로 없음/report_to=none |
+| adapter SHA256 | 071dc22d1351abff59362ec7508d9b2777ccd1d13bdf331848590795ca0627a1 |
+
+`train_on_responses_only` 내부가 67건을 자동 제외했다. 원본 호출 그대로
+발생한 동작이며 이를 사용자가 만든 데이터 필터로 숨기지 않는다. 30step은
+유효933건 전체1epoch 학습이 아니다. 이 runtime의 실제 LoRA tensor 목록과
+trainable 수는 `model-runtime.json`에 보존했다. 원본 target 목록이 같다는
+이유만으로 이전92,626,944-parameter adapter와 학습 범위까지 동일하다고
+주장하지 않는다. 로컬 BnB legacy MoE에서 실제 연결된 모듈 범위도 해석에
+포함한다. adapter 저장 후 새 프로세스에서 원본 loader로 다시 불러온다.
+
+#### v2 최종 생성 결과
+
+8조건과 표 갱신 stage는 모두 exit0으로 실행을 마쳤다. 이는 실험 실행 완료이며
+생성 품질 합격이 아니다. 모델의131,072 문맥에서 실제 입력122토큰을 제외해
+최대 `max_new_tokens=130950`을 적용했다. 원본64 대조도 함께 남겼다.
+추론 kwargs는 inputs/max_new_tokens/관측 streamer뿐이며 native EOS와
+sampling을 직접 덮어쓰지 않았다. 두 모델의 실제 generation_config가 같고,
+EOS는 `[200002,199999]`, forced_eos는None, do_sample=True,
+temperature=1/top_k=50/top_p=1, decoder max_time=None임을 재검증했다.
+
+| 모델 | reasoning | 생성 상한 | 실제 생성 | 종료 | final 채널 | 초 |
+| --- | --- | ---: | ---: | --- | --- | ---: |
+| base | medium | 64 | 64 | token_limit | 없음 | 7.162 |
+| base | medium | 130950 | 3025 | external_time_limit | 없음 | 600.000 |
+| base | high | 64 | 64 | token_limit | 없음 | 6.691 |
+| base | high | 130950 | 3057 | external_time_limit | 없음 | 600.011 |
+| adapter | medium | 64 | 64 | token_limit | 없음 | 6.987 |
+| adapter | medium | 130950 | 3008 | external_time_limit | 부분 답변 있음 | 600.000 |
+| adapter | high | 64 | 64 | token_limit | 없음 | 7.075 |
+| adapter | high | 130950 | 2968 | external_time_limit | 없음 | 600.000 |
+
+원본64는4/4가 추론 도중 길이 제한에 도달했다. 최대 상한은4/4가 외부
+600초 제한에 도달했으며 native EOS는0/4다. adapter/medium의 final marker는
+있지만 답변 말미가 잘렸고 return/EOS는 없다. final 진입을 완성 답변으로
+집계하지 않는다. 최대 상한의 실제 생성 속도는 약5tokens/sec였다.
+따라서 이 결과는 **600초 제한 안에서 생성 상한만 확대해도 완성 답변이
+확인되지 않았다**는 관찰이다. 130,950토큰을 실제로 소진하거나 그 길이의
+KV cache를 유지한 검증은 아니다. 제한 없이 계속 생성했을 때 자연 종료하는지,
+모델이 해당 최대 길이를 처리하지 못하는지는 이번 결과로 판단할 수 없다.
+
+#### 원문 품질과 인과 해석
+
+보존8개 출력의 channel/message marker 수는 각각1 또는2다. adapter/medium만
+analysis→final의 정상 header 전환이 한 번 있고, 이전 C/C++ adapter의 반복
+제어 토큰 루프는 이번 출력에서 관찰되지 않았다. 출력 내용은 영어 수학 추론과
+수치 계산 위주였다. 이 관찰은 native EOS 성공이나 정확한 답을 의미하지 않는다.
+
+동일 질문은 `x^5+3x^4-13=0`이며 독립적인 단조 구간·이분법 계산의 실근은
+약 `-2.783413`, `-1.823035`, `1.317295`다. adapter/medium의 부분 final에는
+`f(1.4)≈0.54`가 있지만 직접 대입한 값은3.90304다. 제시한 음의 근
+`-1.814`도 기준값과 다르다. 답변이 잘린 상태이므로 끝까지 생성했다면
+음의 근을 추가했을지는 판정하지 않는다. EOS와 수학 정확도를 분리했다.
+이는 수학 시연 검토이며 C/C++ 판단의 confusion matrix나 benchmark 점수가
+아니다. 원본 train1,000건에서 demo 질문의 정확한 문자열 일치는0건이었지만
+의미 중복이나 benchmark 오염 전반을 검증한 결과로 확대하지 않는다.
+
+이번 원본 호출로30-step 학습과 저장·재로딩이 가능함은 확인했다. 로컬
+compatibility 실패와 생성 미완료를 구분했고, 원본 학습 AST를 유지한
+compiler-off 복구가 유효했다. 다만 실제 연결된 LoRA는 attention의
+192tensors/3,981,312parameters이며 **expert LoRA tensor는0개**다.
+원본 target 목록과 설치된 legacy BnB MoE의 실물 연결 범위를 구분한다.
+이전92,626,944parameter adapter와 같은 학습 범위의 비교가 아니다.
+
+이 실험은 EOS 설정 하나의 ablation이 아니다. 기존 C/C++ 실험과 dataset,
+학습 길이·step 수, Transformers/TRL 및 실제 LoRA 범위가 다르고, native
+sampling을 그대로 사용해 반복 seed 고정이나 동일 RNG replay도 추가하지
+않았다. 이전에 명시한 EOS200002/199999는 이번 native 목록에도 존재한다.
+따라서 이전 종료 설정이 문제의 원인이었다거나, 원본 코드로 바꾸면 품질이
+회복된다고 확정할 수 없다. 이번 최대 상한의 완료 답변은0/4이며 시간 제한과
+실제 생성량을 함께 남기는 것이 결과의 해석 범위다.
+
+#### 최종 산출물 및 검증
+
+v2 출력 폴더의 다음 파일을 보존했다. 모델·dataset·checkpoint·adapter·원본
+로그는 Git 제외 경로에 유지하고 이 문서에는 재현 조건과 결과만 기록한다.
+
+- `unsloth-original-max-new-tokens-131072-results.md`, `comparison.json`: 최종8행
+- `training-result.json`, `metrics.jsonl`, `mask-and-arguments.json`:30step·loss·native 제외67건
+- `manifest.json`, `execution-bindings.json`, `model-runtime.json`:원본·패키지·실제 LoRA 범위
+- `adapter/`:원본 save_pretrained 결과와 로컬 재로딩용 tokenizer
+- `inference/base/`, `inference/adapter/`:입력·생성 token IDs, 원문, 각 native config, 부분 토큰 로그
+- `raw-output-review.md`/`.json`:실근 기준값과 완료/부분 출력 검토
+- `post-run-audit.json`:원본 AST3검사, 데이터 hash, 30step 및8행 검증 통과
+- `pipeline-v2-result.json`, `train-v2.log`, `base-v2.log`, `adapter-v2.log`:실행 결과와 raw logs
+
+사후 CPU 검사는 데이터1,000건의 hash, 원본 설정, native 제외 후933건,
+step1–30의 유한 loss/gradient, 저장 tensor192개·파라미터 수와 adapter SHA,
+모든 LoRA B의 초기0 대비 갱신, base/adapter 동일 native generation_config,
+실제 token decode·중간 토큰 로그 일치, EOS 무주입 및8개 행을 확인해 통과했다.
+실행 전 원본 AST3검사와 Ruff check도 통과했고 완료 후 GPU compute process는
+없었다. v1의 학습 실패 결과표는0step/adapter4조건 미실행으로 별도 마감했다.
+
+```bash
+experiments/unsloth-original-max-new-tokens-131072/.venv/bin/python \
+  outputs/unsloth-original-max-new-tokens-131072-20261004-v2/audit.py
+experiments/unsloth-original-max-new-tokens-131072/.venv/bin/python \
+  outputs/unsloth-original-max-new-tokens-131072-20261004-v2/review_outputs.py
+```
+
+### 2026-10-04: unsloth-official-tutorial-generation-64
+
+사용자의 최신 지시는 **학습과 생성 길이를 모두 공식 튜토리얼 그대로 실행**하고,
+실험표에 실제 결과를 기록한 뒤 분석하는 것이다. 이전 adapter를 재사용하지 않는다.
+정본은 이미 확보한 Unsloth notebooks commit
+`92e38e86308748d18fc4cd4b104c4c6d3db1d67e`의
+`gpt-oss-(20B)-Fine-tuning.ipynb`와 Python export다. 웹 설명문과 실행 코드의
+값을 섞지 않고, 두 파일의 실행 AST가 일치하는 것을 확인했다.
+
+#### 실행 전 고정표
+
+| 항목 | 원본 조건 |
+| --- | --- |
+| 학습 데이터 | `load_dataset("HuggingFaceH4/Multilingual-Thinking", split="train")` |
+| 모델 | `unsloth/gpt-oss-20b`, `load_in_4bit=True`, `dtype=None` |
+| 학습 길이 / steps | 1,024 / 30 |
+| LoRA | r8 / alpha16 / dropout0, 원본 attention+MLP target 목록 |
+| batch / accumulation | 1 / 4 |
+| LR / warmup / optimizer | 2e-4 / 5 / adamw_8bit |
+| weight decay / scheduler / seed | .001 / linear / 3407 |
+| formatter / mask | 원본 standardize_sharegpt, chat template, final response mask |
+| validation / W&B | 원본 eval dataset 없음 / report_to=none |
+| 생성 | 원본 TextStreamer, max_new_tokens=64, 그 밖의 생성 옵션 원본 유지 |
+| 컴파일·종료 | 추가 compiler-off, 외부 시간 제한, 종료 토큰·prefill 보정 없음 |
+
+| 원본 순서 | 모델 상태 | 프롬프트 | reasoning | 생성 상한 | 실행 전 상태 |
+| --- | --- | --- | --- | ---: | --- |
+| pre-low | LoRA 초기화 후, 학습 전 | 원본 user-only 수학 질문 | low | 64 | pending |
+| pre-medium | LoRA 초기화 후, 학습 전 | 원본 user-only 수학 질문 | medium | 64 | pending |
+| pre-high | LoRA 초기화 후, 학습 전 | 원본 user-only 수학 질문 | high | 64 | pending |
+| train | 새 adapter 학습 | 원본 dataset | 해당 없음 | 해당 없음 | pending |
+| post-medium | 30-step 학습 후 | 원본 French system + 수학 질문 | medium | 64 | pending |
+| adapter-save | 학습 모델 저장 | 원본 `gpt_oss_lora` 상대 경로 | 해당 없음 | 해당 없음 | pending |
+| post-high | 같은 학습 모델 | 원본 French system + 수학 질문 | high | 64 | pending |
+
+원본의 `if False` 재로딩·merge·push 분기는 활성화하지 않는다. 학습 전후
+프롬프트가 다르므로 이 5회를 동일 입력 base/adapter 품질 비교로 집계하지 않는다.
+64토큰에서 끝나면 원본 예산 소진인지 native EOS인지 구분하며,
+시연의 미완성 답변만으로 학습 프레임워크 실패를 판정하지 않는다.
+
+#### 환경과 실행 방법
+
+Git 제외 경로
+`outputs/unsloth-official-tutorial-generation-64-20261004-v1/`에 원본 두 파일,
+설치 셀, `manifest.json`, 실행 전 `results.md`/`results.json`을 보존했다.
+원본 Python SHA256은
+`74ff47bb9212f482f7378d86f27bc088973e924ae427cc84891d87663131895a`다.
+`run.py`는 원본 top-level AST를 수정 없이 순서대로 실행하고 반환값을 관측한다.
+model/generate/streamer/Trainer를 교체하지 않는다.
+
+새 환경은
+`experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv`다.
+기존 venv의 site-packages를 `.pth`로 공유하지 않는다. 원본 설치 셀의
+torch-missing 첫 분기를 로컬 shell 명령으로 옮겨 실행했으며,
+마지막 `--upgrade --no-deps` 및 torchao 설치도 그대로 적용했다.
+원본에서 버전을 고정하지 않은 패키지는 이번 설치 시점에 결정된 값을 기록한다.
+
+| 패키지 | 실제 설치 버전 / provenance |
+| --- | --- |
+| Python | 3.12.13 |
+| torch / triton | 2.14.1 / 3.8.0 |
+| transformers / trl | 4.56.2 / 0.22.2 |
+| Unsloth | 2026.9.14, Git `5971d280d4b645c8d470d6bb3171b082c4d4d2b8` |
+| Unsloth Zoo | 2026.9.9, Git `867a86383371ebeb8ab1948d085540d134c07b4c` |
+| triton_kernels | 원본 고정 Git `0add68262ab0a2e33b84524346cb27cbb2787356` |
+| bitsandbytes / PEFT / torchao | 0.50.2 / 0.21.2 / 0.18.0 |
+| huggingface-hub / tokenizers | 0.36.2 / 0.22.2 |
+
+GPU는 RTX A6000 49,140MiB, driver595.84다. 저장 위치만 새 process cwd 및
+기존 Hugging Face cache 경로로 지정한다. Colab OS/GPU까지 같다는 뜻은 아니다.
+원본 설치 전체 성공, `uv pip check`의 113개 패키지 호환 검사 성공,
+notebook/Python 실행 AST 일치, 원본 5회 생성 상한64 확인,
+관측 스크립트 Python 구문 검사 성공을 기록했다.
+
+```bash
+cd outputs/unsloth-official-tutorial-generation-64-20261004-v1
+python3 -u install.py > installation.log 2>&1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u run.py > execution.log 2>&1
+```
+
+실행 오류가 발생하면 해당 후보를 실패로 마감하고 원본 오류와 미실행 행을
+기록한다. 설정·의존성·compiler 경로를 임의로 수정한 재시도를 같은 결과에
+섞지 않는다. 실행 후 결과와 분석은 아래에 추가한다.
+
+#### 실제 실행 결과: completed
+
+2026-10-04 18:01:10–18:07:29 KST에 원본 실행 AST의 64개 top-level 문장을
+순서대로 실행해 exit0으로 마감했다. 원본 조건 외의 학습·생성 인자를 추가하지
+않았고, compiler-off 및 외부 시간 제한을 적용하지 않았다. 원본의 disabled
+재로딩·merge·push 분기도 그대로 비활성 상태였다.
+
+| 학습 지표 | 실제 값 |
+| --- | ---: |
+| 완료 optimizer steps | 30 / 30 |
+| 원본 데이터 / 유효 학습 데이터 | 1,000 / 933 |
+| 원본 처리에서 제외된 all-ignored-label record | 67 |
+| native 학습 시간 | 275.4449초 |
+| 평균 train loss | 1.003214 |
+| step1 / step30 loss | 1.0702 / 0.6554 |
+| 첫5 / 마지막5스텝 평균 loss | 1.17802 / 0.94244 |
+| non-finite loss·grad norm step | 0 |
+| 실제 학습 epoch | 0.128617 |
+| trainable parameters / tensors | 92,454,912 / 3,264 |
+| 그중 expert trainable parameters | 88,473,600 |
+| 학습 전후 해시가 바뀐 trainable tensors | 3,264 / 3,264 |
+| native peak reserved GPU memory | 19.295GiB |
+
+원본 relative checkpoint와 adapter 경로는 새 process cwd 아래에 생성됐다.
+최종 adapter는
+`outputs/unsloth-official-tutorial-generation-64-20261004-v1/gpt_oss_lora/adapter_model.safetensors`다.
+파일 크기370,291,488 bytes, tensor 수3,264, parameter 수92,454,912이며
+저장 파일의 shape 합계와 실제 학습 parameter 합계가 일치했다. SHA256은
+`d914cf7fb22e10d3f68fadc39f7c3583cef3b832f550437ae3ebb4300531d9ba`다.
+원본대로 저장까지만 검증했으며, 비활성 재로딩 분기를 켠 별도 검증은 하지 않았다.
+
+| 조건 | 입력 토큰 | 상한 | 실제 생성 토큰 | 종료 이유 | final marker | 시간(초) |
+| --- | ---: | ---: | ---: | --- | --- | ---: |
+| pre-low | 98 | 64 | 64 | token_limit | 없음 | 14.558 |
+| pre-medium | 98 | 64 | 64 | token_limit | 없음 | 5.389 |
+| pre-high | 98 | 64 | 64 | token_limit | 없음 | 5.451 |
+| post-medium | 122 | 64 | 64 | token_limit | 없음 | 5.923 |
+| post-high | 122 | 64 | 64 | token_limit | 없음 | 5.538 |
+
+5회 모두 원본 TextStreamer와 생성 상한64로 정상 반환했다. native EOS 종료는0/5,
+외부 시간 제한은0/5다. 모든 원문은 `<|channel|>analysis<|message|>`로 시작하고,
+64토큰 안에는 final 채널이나 완성된 수학 정답이 없다. 각각 analysis marker는
+1개라 이 범위에서 반복되는 channel 접두부 루프는 관측하지 않았다.
+수식과 질문을 여러 번 재진술하는 부분은 있지만 64토큰 밖의 반복 여부나
+자연 종료 가능성은 이 실행으로 확인하지 않았다.
+
+#### 입력·출력과 실제 mask 분석
+
+원본의 학습 전 입력은 user-only 수학 질문이고, 학습 후 입력은
+`reasoning language: French`를 포함하는 system 메시지와 같은 질문이다.
+native chat template는 이 system 지시를 developer 영역에 넣었다.
+학습 후 medium 출력은 `We have to solve equation: ...`, high 출력은
+`We need to solve ...`로 시작했다. **관측한 첫64토큰은 둘 다 영어**였으므로,
+이 시연에서 French reasoning 적응 성공을 확인했다고 기록하지 않는다.
+
+실제 native 처리 후 Arrow cache의 input_ids/labels도 모델 재로딩 없이
+검사했다. 1,000건의 cached labels에서 확인한 값은 다음과 같다.
+
+| 라벨 검사 | 실제 값 |
+| --- | ---: |
+| analysis 본문 토큰 | 468,501 |
+| 그중 supervised analysis 토큰 | 0 |
+| final 본문 토큰 | 226,733 |
+| 그중 supervised final 토큰 | 226,733 |
+| 모든 labels가 -100인 record | 67 |
+| full final header가 없는 record | 65 |
+| final header는 있으나 supervised 본문이 없는 record | 2 |
+
+이는 원본 `train_on_responses_only`의 final response mask가 실제로
+**final만 직접 학습하고 analysis 본문은 loss에서 제외**했음을 보여준다.
+67건은 agent가 새 필터를 만든 결과가 아니라 원본 helper의 자동 처리이며,
+65건은 final header가 없고 2건은 header 뒤 학습할 본문이 남지 않았다.
+따라서 “공식 예제가 French reasoning 데이터로 학습하니 analysis의 언어도
+직접 학습된다”는 해석은 이 설정과 맞지 않는다. 이 mask가 영어 출력의
+단독 원인이라고 단정하지는 않는다. 짧은 학습량과 생성 예산 등 다른 조건도
+있고, 같은 입력으로 mask만 바꾼 비교를 하지 않았기 때문이다.
+
+#### 해석과 기존 실행과의 차이
+
+이번 환경에서는 공식 설치 처방과 원본 실행 셀로 모델 로딩, 실제30-step
+학습, 생성5회, adapter 저장까지 완료됐다. **Unsloth로 학습 자체가 불가능하다는
+결론은 이 결과와 맞지 않는다.** 반면 완성된 답변·French reasoning 적응·
+C/C++ 판단 성능을 입증한 실험도 아니다. 답변 미완성은 모두 실제 원본
+64토큰 예산 소진으로 관측됐으며, 실행 예외·외부 시간 제한과 구분한다.
+
+원본에는 validation dataset과 W&B가 없고 effective 설정은
+`eval_strategy=no`, `report_to=[]`다. 30스텝은 유효 데이터 전체1회 학습이 아니라
+약0.129epoch이며, train loss 감소만으로 일반화 품질을 판정하지 않는다.
+C/C++ test500 평가·혼동행렬은 실행하지 않았다.
+
+이번 원본 설치 셀은 floating Git refs와 torch 하한을 포함한다. 그 처방대로
+새로 설치한 실제 환경은 이전 혼합 환경과 달라졌다.
+
+| 항목 | 이전 최대 생성 실험 v2 | 이번 원본64 실행 |
+| --- | --- | --- |
+| Torch / Unsloth / Zoo | 2.10.0 / 2026.6.9 / 2026.6.7 | 2.14.1 / 2026.9.14 / 2026.9.9 |
+| 환경 구성 | 기존 site-packages를 .pth로 공유 | 새 독립 venv, 원본 설치 셀 |
+| compiler override | `UNSLOTH_COMPILE_DISABLE=1` | 없음 |
+| trainable parameters | 3,981,312 | 92,454,912 |
+| expert trainable parameters | 0 | 88,473,600 |
+| 원본 생성 호출 | 별도8조건 비교로 대체 | 원본5회 그대로 |
+| 외부 generate 제한 | 각600초 | 없음 |
+
+동일한 원본 target 목록이라도 이번 라이브러리는 로그에서 64개 expert
+projection module의 LoRA를 활성화했다고 알렸다. 따라서 이전과의 loss·
+출력 차이를 종료 토큰이나 생성 길이 하나에만 귀속할 수 없다.
+
+이번 native generation config의 EOS 목록은 `[200002,199999,200012]`다.
+마지막 `<|call|>` ID200012는 새 Unsloth가 로딩 중 자동 추가했다는 로그가 있다.
+에이전트가 EOS 목록을 주입한 것은 아니며, original.generate kwargs에는
+EOS·forced_eos·sampling·prefill·max_time 인자를 추가하지 않았다.
+native forced_eos는None, do_sample=True, temperature1.0, top_k50, top_p1.0이다.
+모델 alias는 실제로 기존 cache의 `unsloth/gpt-oss-20b-unsloth-bnb-4bit`로
+연결됐고 quantization은 BnB NF4, bf16 compute, double quant였다.
+
+#### provenance·산출물·검증
+
+native model cache revision은 `093fba6992ef5a7152481afec0bdfca1ac486998`,
+dataset revision은 `f423949d2726f5a5633ea10ac45bc1ea1e0de6e7`이다.
+원본 train parquet SHA256은
+`db53734e93e43a211c631b460fdfc6c01fa0c919f426046e89360928a6f85e26`,
+label cache SHA256은
+`a7d94ebd80cb74e9697bf88196667eaa5f60e3386ce69cac1b9c2131bf1db079`다.
+source 파일·dataset·model·adapter·raw log는 Git 제외 경로에 남겼다.
+
+새 실험 디렉터리의 결과 파일:
+
+- `results.md` / `results.json`: 최종5조건 실험표와 학습 상태
+- `analysis.md` / `analysis.json`: 전체5개 생성 원문과 해석·학습·저장 검증
+- `training.json`: native metrics,30step log_history, effective SFTConfig
+- `pre-*.json` / `post-*.json`: 실제 input/output token IDs·원문·generation config
+- `manifest.json`, `packages.json`, `installation.json` / `.log`: 원본·환경·설치 명령
+- `runtime.json` / `execution.log`: 원본64문장 실행 순서와 실제 stdout/stderr
+- `cache-provenance.json`, `dataset-cache-files.json`, `label-inspection.json`: cache 계보·실제 labels 검사
+- `trainable-parameters.json`: 초기 trainable tensor 형태와 해시
+- `audit.json`: 원본 AST·kwargs·순서·실제 토큰 수·완료 상태 대조8항목 통과
+
+Python 구문 검사 및 관측 스크립트 Ruff check를 통과했다. 실제30step의
+loss/grad norm이 모두 finite이고, 저장 safetensors의 parameter 수와 학습 전후
+3,264개 tensor 변경을 확인했다. 원본을 바꾸는 수정이나 추가 GPU 실험은 하지 않았다.
+
+```bash
+cd outputs/unsloth-official-tutorial-generation-64-20261004-v1
+python3 audit.py
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  inspect_labels.py
+```
+
+### 2026-10-04: official-tutorial-v5-dataset-token-caps
+
+사용자는 공식 튜토리얼에서 데이터셋만 우리 것으로 교체해 새로 학습하고,
+생성은 기존 실험표의 토큰 길이 조건으로 진행하도록 요청했다.
+새 실험 ID는 `cc-official-tutorial-v5-token-caps-20261004-v1`, 설정은
+`configs/cc_official_tutorial_dataset_v5_token_caps_v1.json`이다.
+바로 앞 공식 원본64 실험에서 설치·검증한 독립 venv를 그대로 사용하므로
+이번 실행 중 패키지를 업데이트하지 않는다.
+
+#### 실행 전 고정 조건
+
+- 학습 입력: `data/processed/cc-source-candidates-20260928-v5/decision-candidates/train.jsonl` 10,000건만 사용.
+- validation1,000은 optimizer 입력에 넣지 않는다. 기존 실험표의 동일 validation2건만 생성 진단에 사용한다.
+- 기존 test500·gold 파일은 학습·표본 선택·생성 평가에 로딩하지 않는다. 보존된 전체 split audit와 train/validation ID 독립성을 대조한다.
+- 공식 학습 AST의 모델·LoRA·formatter·SFTConfig·final response mask·train·save 호출은 그대로다.
+- 변경한 학습 AST는 `load_dataset` 1개뿐이다. 로컬 JSONL loader로 역변환 검사 시 그 외 AST가 모두 원본과 같다.
+- 학습 길이1,024, steps30, batch1×accumulation4, LR2e-4, warmup5, adamw_8bit, weight decay.001, seed3407은 원본 값이다.
+- validation 및 W&B는 원본처럼 비활성이다. 이전 C/C++100-step·4096-token 설정으로 바꾸지 않는다.
+
+#### 데이터 형식 연결과 길이 검사
+
+우리 원본 assistant 메시지는 `role`과 JSON `content`만 가진다. 이 형식을
+native chat template에 그대로 넣으면 `<|start|>assistant<|message|>`가 되어
+공식 final response mask의 marker와 일치하지 않았다. 따라서 학습용 사본의
+assistant에 **`thinking: ""`만 추가**했다. 원본 공식 dataset의 assistant 형식에
+맞추기 위한 연결이며 system/user/assistant content와 JSON label은 그대로다.
+원본 dataset 폴더를 수정하지 않고 새 실험의 `training-messages.jsonl`에 저장한다.
+추가 reasoning 문장·근거·정답 보정은 만들지 않는다.
+
+CPU 준비에서 10,000건 content 보존과 실제 installed Zoo의 masking 함수로
+토큰·정답 마스크를 확인했다. 최초 CPU 관측 helper에는 새 Zoo의 내부 helper
+추출이 누락돼 NameError가 있었고 `prepare-attempt1.py`/`.log`로 보존했다.
+누락된 `_stable_marker_edges`와 상수만 함께 읽도록 고쳤다. 학습 recipe를
+우회하거나 바꾸는 수정은 아니며 GPU 학습 전에 준비 검사를 완료했다.
+
+| 길이·라벨 항목 | CPU 사전 검사 |
+| --- | ---: |
+| 원본 train | 10,000 |
+| 원본 present / not_observed | 5,000 / 5,000 |
+| 원본1,024토큰을 넘는 record | 1,490 |
+| 완전한 JSON+return target이 남는 record | 8,510 |
+| supervised target 일부만 남는 record | 15 |
+| 모든 target이 잘려 자동 제외될 record | 1,475 |
+| 예상 유효 train | 8,525 |
+| 예상 유효 present / not_observed | 3,831 / 4,694 |
+
+길이는 user의 요청대로 원본1,024를 유지한다. 이 실험을 train10,000 전체
+정답이 온전한4096-token 학습으로 기록하지 않으며, partial target15건도 숨기지
+않는다. 실제 SFTTrainer 처리 수와 native mask 결과는 학습 후 대조한다.
+원천 취약 여부/CWE는 미검수 후보 라벨이며, 기존에 승인한 판단 학습 실험
+범위에서 사용한다. human-reviewed 정답으로 표시하지 않는다.
+
+#### 생성 표와 적용 범위
+
+이전 `max-new-tokens-65536` 표의128/512/2048/65536을 적용하고, 후속
+최대 문맥 실험의 `131072 - input_tokens` 조건도 포함한다.
+모든 행에 이전 표의 같은 validation ID2건을 쓰며 gold-free system/user만 입력한다.
+
+| 모델 | 생성 상한 조건 | 입력 | 생성 호출 수 |
+| --- | --- | --- | ---: |
+| base | 128 / 512 / 2,048 / 65,536 / context-minus-input | 동일 validation2건 | 10 |
+| 새30-step adapter | 같은5조건 | 동일 validation2건 | 10 |
+
+ID는 `cc-55fa921bc64a64071c4dd1c9`(present)와
+`cc-b8bec7f8c250c406ad4ed545`(not_observed)다. first base128 진단을 먼저
+실행하고 새 학습을 진행한 뒤 나머지 base/adapter 표를 채운다.
+큰 예산의 생성 때문에 새 학습 착수가 밀리지 않도록 실행 순서만 나눴다.
+추론 loader의 context131,072는 이 표의 큰 생성 예산용이며 학습1,024와 구분한다.
+
+기존 표는 greedy/low reasoning이지만 공식 tutorial은 native sampling이다.
+이 차이에 대해 사용자에게 선택 질문을 보냈고, 독립적인 데이터 준비를 계속했다.
+별도 답변 없이 준비가 끝난 시점에는 권장안인 **공식 기본 생성 유지, 길이만 변경**을
+적용한다고 안내했고, 학습 도중 사용자가 같은 선택을 명시적으로 회신했다.
+회신은 새 실험의 `user-selection.json`에 기록했다.
+그 조건은 mode=`official-native-defaults`, native medium
+reasoning, native EOS/sampling/pad 설정이다. 별도 `do_sample`, EOS, forced_eos,
+final-prefill, 외부 시간 제한, `max_time`을 주입하지 않는다.
+표의 길이 조건을 재사용하되 과거 greedy의 동일 protocol이라고 주장하지 않는다.
+각 native sampling 호출의 RNG를 새로 고정하거나 rewind하지도 않으므로,
+서로 다른 예산의 출력 접두부나 성공률이 단조로 같다고 가정하지 않는다.
+
+원문/token IDs/실제 생성량/종료 이유/final 존재/JSON·판단 schema·원천 라벨 일치를
+행별로 기록한다. 동일2건 진단이며 전체 validation/test500 성능으로 일반화하지 않는다.
+형식 실패는 오분류와 별도로 집계한다.
+
+#### 명령·저장 위치
+
+실험 실행 코드·원본·임시 데이터·adapter·로그·표는 Git 제외 경로
+`outputs/cc-official-tutorial-v5-token-caps-20261004-v1/`에 보존한다.
+설정과 요약 문서만 Git 변경 대상으로 두며, 현재 요청에 commit/push는 포함하지 않는다.
+
+```bash
+cd outputs/cc-official-tutorial-v5-token-caps-20261004-v1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u prepare.py > prepare.log 2>&1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u generate.py --model base --phase baseline > base-baseline.log 2>&1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u train.py > training.log 2>&1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u generate.py --model base --phase remaining > base-remaining.log 2>&1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u generate.py --model adapter --phase all > adapter-all.log 2>&1
+```
+
+설정·CPU 준비의 Python 구문 검사와 Ruff check는 통과했다. 원본 학습 AST,
+실제 학습·adapter 재로딩·20개 생성 결과를 아래에 기록했다.
+
+#### 실제 학습 결과와 환경
+
+공식30-step 학습과 adapter 저장을 완료했다. 평균 train loss는
+**0.230625**, 마지막 step loss는0.0996, native train runtime은226.963초다.
+30개의 loss·grad norm이 모두 finite였고 유효 train 수는 예상과 같은
+**8,525건**이었다. native Arrow cache의10,000개 실제 labels를 사전 검사와
+행별로 대조해 길이와 supervised token 수가 전부 일치했다.
+원본1,024-token truncation으로1,475건이 제외되고15건은 partial target으로
+남는 것을 확인했다. full train10,000을 모두 온전히 학습한 결과는 아니다.
+
+batch1×accumulation4의30step은 약120회 표본 제시, epoch0.01408이다.
+낮은 train loss로 전체 데이터 학습 완료나 일반화 성능을 주장하지 않는다.
+trainable parameter는92,454,912개·3,264개 tensor이며 저장 전후 해시에서
+3,162개 tensor 변경을 확인했다. expert LoRA를 포함하는 native 구성으로,
+이전 구환경의3,981,312개 parameter 실행과 같은 adapter 구성은 아니다.
+native peak reserved GPU memory는19.295GiB다.
+
+환경은 RTX A6000 49,140MiB, NVIDIA driver595.84, Python3.12.13,
+Torch2.14.1+cu130, Triton3.8.0, Transformers4.56.2, TRL0.22.2,
+Unsloth2026.9.14, Zoo2026.9.9다. Unsloth Git SHA는
+`5971d280d4b645c8d470d6bb3171b082c4d4d2b8`, Zoo는
+`867a86383371ebeb8ab1948d085540d134c07b4c`다.
+이 실험에서 model venv는 변경하지 않았으며 `uv pip check`는113개 package
+호환성을 통과했다. 실행 후 package 목록도 별도로 기록했다.
+모델 alias `unsloth/gpt-oss-20b`는 기존 BnB NF4·bf16 compute·double quant
+cache를 사용한다. cache revision은 `093fba6992ef5a7152481afec0bdfca1ac486998`이다.
+저장 adapter SHA256은
+`6a5721a752ac49b31485641d1b402ad7529c63b4818e1342a67922f9a09ca827`이다.
+
+#### 평가 파서 누락과 실제 출력 오류 구분
+
+첫 fixed-string 검사는 `<|channel|>final<|message|>`만 인식했다.
+그러나 base의 일부 정상 출력은
+`<|channel|>final <|constrain|>json<|message|>` 헤더였다.
+이 형식에는 실제 final JSON이 있어도 initial matcher가 없는 것으로 집계했다.
+Harmony는 채널과 형식 metadata를 함께 표현할 수 있으므로
+[공식 Harmony 형식 문서](https://developers.openai.com/cookbook/articles/openai-harmony)와
+[공식 parser](https://github.com/openai/harmony)를 기준으로 token IDs를 다시 평가한다.
+원래 `results.json`과 raw 생성물은 보존하고, corrected 결과는
+`scored-results.json`·`.md`에 분리한다. 학습·생성 설정이나 이미 받은 출력은
+수정하지 않는다.
+
+반대로 adapter512의 음성 표본에는 `final` 뒤에 또 `analysis` 채널과
+가상의 tool recipient가 붙는 잘못된 헤더가 있다. JSON 내용이 원천 라벨과
+같더라도 공식 parser에서 final로 나오지 않으므로 형식 실패로 남긴다.
+base512의 음성 표본은 commentary tool request 뒤 `<|call|>`로 종료한다.
+이 역시 JSON 판단 final이 아니며 도구 실행은 하지 않았다.
+native EOS로 끝났다는 사실과 유효한 최종 답변인지는 서로 다른 지표다.
+
+추가 parser는 model venv와 분리한
+`experiments/cc-official-tutorial-v5-score/.venv`의 `openai-harmony0.0.8`이다.
+원 token IDs를 읽기만 하며 생성에 영향을 주지 않는다. 실제 constrained final,
+analysis 안의 JSON, 실제 tool handoff, 잘못된 중복 channel header,
+uncertain, incomplete JSON·trailing text·wrong type·extra field를 검사한
+pytest **9건**을 통과했다. 합성 fixture의 special token encoding 허용 누락을
+고친 뒤 재검사했고 실제 생성물은 바꾸지 않았다.
+
+```bash
+uv venv --python python3 experiments/cc-official-tutorial-v5-score/.venv
+uv pip install --python experiments/cc-official-tutorial-v5-score/.venv/bin/python \
+  openai-harmony==0.0.8 pytest==8.4.2
+experiments/cc-official-tutorial-v5-score/.venv/bin/python -m pytest -q \
+  outputs/cc-official-tutorial-v5-token-caps-20261004-v1/test_score.py
+```
+
+실제 초기 설치 명령의 parser에는 version pin이 없었고0.0.8로 resolved됐다.
+위 명령은 재현용 pin이며 실제 명령과 전체 보조 package version은
+`scoring-environment.json`에 별도로 기록했다.
+
+#### 최종 생성 실험표 — 20/20 완료
+
+각 행은 **같은 validation2건**이다. 실제 생성량은 양성/음성 순서다.
+원 token IDs를 official Harmony parser로 평가한 `scored-results.json`이
+이 표의 정본이며 초기 literal matcher 결과도 별도로 보존했다.
+`JSON/schema`는 유효한 판단 final, `라벨 일치`는 원천 후보 라벨과의 일치다.
+둘을 동일 지표로 취급하지 않는다.
+
+| 모델 | 생성 상한 | JSON/schema | 라벨 일치 | uncertain | 형식 실패 | EOS / 상한 종료 | 실제 생성 토큰 |
+| --- | --- | ---: | ---: | ---: | ---: | --- | --- |
+| base | 128 | 0/2 | 0/2 | 0 | 2 | 0 / 2 | 128 / 128 |
+| adapter | 128 | 0/2 | 0/2 | 0 | 2 | 0 / 2 | 128 / 128 |
+| base | 512 | 1/2 | 1/2 | 0 | 1 | 2 / 0 | 451 / 315 |
+| adapter | 512 | 0/2 | 0/2 | 0 | 2 | 1 / 1 | 512 / 486 |
+| base | 2,048 | 2/2 | 1/2 | 1 | 0 | 2 / 0 | 347 / 464 |
+| adapter | 2,048 | 2/2 | 2/2 | 0 | 0 | 2 / 0 | 857 / 524 |
+| base | 65,536 | 2/2 | 1/2 | 1 | 0 | 2 / 0 | 308 / 577 |
+| adapter | 65,536 | 2/2 | 2/2 | 0 | 0 | 2 / 0 | 904 / 830 |
+| base | context-minus-input | 2/2 | 1/2 | 1 | 0 | 2 / 0 | 203 / 517 |
+| adapter | context-minus-input | 2/2 | 2/2 | 0 | 0 | 2 / 0 | 549 / 823 |
+
+첫 표본 입력은293token, 둘째는235token이다. 최대 문맥 조건의 실제
+`max_new_tokens`는 각각 **130,779 / 130,837**이었다. 최대 조건의 adapter는
+549/823token 뒤 native EOS로 끝났으므로13만token을 모두 생성한 실행은 아니다.
+외부 시간 제한은 없었고 모든 호출이 native generate에서 정상 반환했다.
+EOS로 끝난15호출 중2호출은 유효 final이 없으며, native EOS와 출력 품질을
+따로 확인해야 한다. 실제 stop 합계는 base EOS8·상한2,
+adapter EOS7·상한3으로 **EOS 총15호출**이다.
+
+이진 confusion matrix로는2,048/65,536/최대 문맥의 각 조건에서 base가
+TP1·uncertain1, adapter가TP1·TN1이다. FP/FN은 없지만 짧은 조건의
+invalid와 base의 uncertain을 제외하고 전체 품질이100%라고 해석하지 않는다.
+조건별 TP/TN/FP/FN·invalid·uncertain은 `analysis.json`·`.md`에 기록했다.
+
+초기 literal matcher가 정상 final을 누락한 것은 **3건**이다.
+base512의 양성, base2048의 양성·음성이며 corrected parser에서 복구됐다.
+이 세 건은 모델 생성 실패가 아니라 evaluator의 형식 인식 누락이었다.
+나머지 짧은 예산의 analysis truncation, tool handoff, 중복 channel header는
+실제 출력 문제로 남아 있다. 원문에 정답 JSON이 언급된다고 final로 인정하지 않는다.
+
+#### 해석·다음 판단에 사용할 범위
+
+이번 공식 recipe로 학습·저장·독립 프로세스의 **base+unmerged adapter 로딩**과
+생성이 성공했다. Unsloth에서 학습 자체가 불가능하다는 결론은 이 결과로
+지지되지 않는다. 이 로더는 Unsloth이며 vLLM adapter 서빙 검증은 아니다.
+2,048 이상 조건에서는 두 사례의 출력 형식과 원천 라벨 일치가 확인됐다.
+base의 음성 판단은 uncertain, adapter는 not_observed로 달라졌지만
+동일2건 반복·native sampling·미검수 후보 라벨이라 일반화 개선을 확정하지 않는다.
+
+128의 예산 소진과512의 형식 실패로 보아 이번 입력에서 모든 문제를
+최대 context 부족 하나로 설명할 수 없다. 예산별 RNG가 같지 않으므로
+512에서 실패하고2048에서 성공한 차이도 길이만의 인과로 단정하지 않는다.
+source train은10,000건이지만 학습은30step·0.01408epoch에 불과하고
+1,475건 제외·15건 partial target이라는1024-token 제약이 있다.
+실험 요청대로 조건을 유지했으며 이번 결과를 보고 길이·step·EOS·prompt를
+추가 수정하거나 test500 평가로 범위를 확장하지 않았다.
+
+#### 최종 산출물·검증
+
+실험 폴더 `outputs/cc-official-tutorial-v5-token-caps-20261004-v1/`의
+`analysis.md`·`.json`은 학습·입력/출력·confusion·실패 원인·제한을 정리한
+최종 보고서다. `scored-results.md`·`.json`은 corrected 최종 실험표,
+`results.md`·`.json`은 original literal matcher 관측 이력이다.
+raw20개 JSON/TXT와 각 generate log, 원본/변경 AST, 실제 native mask cache,
+저장 adapter, `training.json`, 환경·명령·해시 manifest를 보존했다.
+학습 recipe에서는 dataset loader만 변경됐다는 AST 비교와 실제 저장
+3,264개 tensor·92,454,912개 parameter 검사를 통과했다.
+실험 중113개 model package version과 기록된 Git provenance가 그대로임도
+대조했다. 별도 Harmony 평가 환경의 설치는 model venv를 바꾸지 않았다.
+
+```bash
+cd outputs/cc-official-tutorial-v5-token-caps-20261004-v1
+../../experiments/cc-official-tutorial-v5-score/.venv/bin/python score.py
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python audit.py
+../../experiments/cc-official-tutorial-v5-score/.venv/bin/python analyze.py
+```
+
+final audit은20호출 완료, 같은 input IDs, 각 요청 예산·실제 token 수·native EOS,
+do_sample=True/temperature1/top_k50/top_p1, forced_eos/max_time=None,
+실제10,000건 mask 일치 검사를 통과했다. pytest9건, 관측/평가/분석 코드의
+Ruff·Python 구문 검사, 설정 JSON 검사와 `git diff --check`도 통과했다.
+GPU 종료 후 사용량은209MiB로 복귀했다. 현재 요청에는 commit/push가 없어
+설정과 요약 문서 변경은 로컬에 남겼다.
+
+### 2026-10-04: official-tutorial-v5-max-steps-100
+
+사용자는 성공한 직전30-step 실험의 다른 조건을 바꾸지 않고
+`max_steps`만100으로 늘려 같은 기록 방식과 생성 실험표로 진행하도록 요청했다.
+실험 ID는 `cc-official-tutorial-v5-max-steps-100-20261004-v1`, 설정은
+`configs/cc_official_tutorial_dataset_v5_max_steps_100_v1.json`이다.
+기준 실험은 `cc-official-tutorial-v5-token-caps-20261004-v1`이며 결과를 보존한다.
+
+#### 고정 조건과 변경 범위
+
+| 항목 | 기준30step | 새100step |
+| --- | --- | --- |
+| max_steps | 30 | **100** |
+| 시작 모델·seed | fresh base / 3407 | 동일 |
+| train 파일·assistant 형식·mask | v5 train10,000 / empty thinking / official final-only | 동일 |
+| 학습 길이·batch·accumulation | 1,024 / 1 / 4 | 동일 |
+| LR·scheduler·warmup·optimizer·decay | 2e-4 / linear / 5 / adamw_8bit / .001 | 동일 |
+| LoRA·환경·cache revision | 원본 r8/alpha16/dropout0, 기존 독립 venv와 cache | 동일 |
+| validation·W&B | 원본 `eval_strategy=no`, `report_to=[]` | 동일 |
+| 생성 표본·상한 | 동일 validation2건 /128·512·2048·65536·context-minus-input | 동일 |
+| 생성 sampling·reasoning·EOS | native sampling / medium / native EOS | 동일 |
+| 외부 시간 제한·forced EOS·final-prefill·compiler override | 없음 | 동일 |
+| optimizer 표본 제시 수 | 약120 / epoch0.01408 | 약400 / epoch0.04692 예정 |
+
+새 run은 같은 base에서 원본 seed로100step을 실행한다. 기존30step adapter를
+resume하는 별도 경로는 추가하지 않는다. 기존 linear scheduler는
+총 optimizer step 수를 사용하므로 `max_steps=100`에 따라 LR 곡선도 자동으로
+100step 기준이 된다. scheduler 종류·초기 LR·warmup을 별도로 변경하지 않았고,
+30step run의 첫30step과 가중치 경로가 완전히 같다고 주장하지 않는다.
+
+CPU 준비를 같은 `prepare.py`로 다시 실행했다. 원자료·train10,000·validation1,000
+독립성 검사,10,000건 token/mask 결과와 생성용2건 입력을 대조했다.
+`training-messages.jsonl`, `dataset-audit.json`, `prompts.json`, `gold.json`,
+`frozen-inputs.json`이30step 실험과 byte 단위로 동일하다.
+유효8,525·완전 target8,510·partial15·제외1,475도 그대로 유지한다.
+길이·표본·라벨을 추가 수정하거나 test500을 로딩하지 않는다.
+
+실행 전 실제 `train.py`의 AST 준비 부분을 CPU-only로 실행해
+dataset 경로와 `max_steps`를 제외한 학습 AST가30step과 같음을 검사했다.
+새 artifact 경로는 같은 해시의 학습 사본을 가리킨다. 공식 원본과 비교하면
+기존의 dataset loader 교체에 `SFTConfig.max_steps`30→100만 추가된다.
+`generate.py`와 official Harmony `score.py`도30step과 byte 단위로 같다.
+113개 model package version과 기록된 Git provenance를 다시 대조해 일치했다.
+보조 parser 환경은 기존 openai-harmony0.0.8을 사용하며 새 설치는 하지 않았다.
+
+실행 기록 helper 복제의 첫 시도는 formatting된 `audit.py`에서 single-line
+문자열을 찾는 assertion에 걸렸다. GPU 실행 전의 준비 오류이며
+`setup-attempt1.json`에 남겼다. 실제 source block을 확인해 사후 감사 부분만
+수정한 뒤 recipe 검사와 CPU 준비를 통과했다. 학습 hyperparameter나
+generation의 변경·재시작·결과 덮어쓰기는 없었다.
+
+#### 실행 순서와 저장 위치
+
+기준 실험과 같은 순서로 base128 진단 → fresh100step 학습·저장 → 나머지
+base8호출 → 독립 adapter reload·10호출을 실행한다. 총20개 새 생성 결과를
+보존하고30step 결과와 같은 공식 Harmony parser로 비교한다.
+짧은 예산·형식 실패·uncertain·tool request를 기존과 같은 방식으로 분리한다.
+native sampling RNG를 새로 고정하거나 rewind하지 않으므로 한 조건의
+두 건 일치 차이를 전체 정확도나 step 수만의 인과로 단정하지 않는다.
+
+원본·실행 source·token IDs·data 사본·adapter·로그·결과표·보고서는
+`outputs/cc-official-tutorial-v5-max-steps-100-20261004-v1/`에 저장한다.
+설정과 요약 문서만 Git 변경 대상으로 두며 commit/push는 현재 요청에 없다.
+
+```bash
+cd outputs/cc-official-tutorial-v5-max-steps-100-20261004-v1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u prepare.py > prepare.log 2>&1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u generate.py --model base --phase baseline > base-baseline.log 2>&1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u train.py > training.log 2>&1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u generate.py --model base --phase remaining > base-remaining.log 2>&1
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python \
+  -u generate.py --model adapter --phase all > adapter-all.log 2>&1
+```
+
+실행 전 CPU 준비·recipe AST 검사·package provenance 대조·동일 parser의
+pytest9건을 통과했다. 학습100step·저장·재로딩·생성20/20을 완료했으며 결과는 아래와 같다.
+
+#### 실제100step 학습 결과
+
+| 항목 | 기준30step | 새100step |
+| --- | ---: | ---: |
+| optimizer steps | 30 | 100 |
+| native 평균 train loss | 0.230625 | 0.130558 |
+| 마지막 step loss | 0.0996 | 0.0860 |
+| native train runtime(초) | 226.963 | 656.811 |
+| epoch | 0.01408 | 0.04692 |
+| 변경된 trainable tensor / 전체 | 3,162 / 3,264 | 3,178 / 3,264 |
+| trainable parameters | 92,454,912 | 92,454,912 |
+| 원본 / 유효 train | 10,000 / 8,525 | 10,000 / 8,525 |
+
+100개의 실제 step loss·gradient norm이 모두 finite였다. 최종 adapter를
+저장하고 별도 프로세스에서 unmerged base+adapter 로딩을 완료했다.
+초기 trainable tensor3,264개의 해시는30step과 전부 같았다.
+native SFTConfig 전체를 대조해 `max_steps`와 동적으로 생성되는
+`logging_dir` 외의 모든 항목이 같음을 확인했다. 데이터 사본·실제 native mask
+10,000건·생성용 input IDs·생성 코드·parser 코드도 기준 실험과 같았다.
+linear scheduler의 전체 예산에 따른 파생 LR 차이는 첫30step 중24개
+logged step에서 관측했으며 `step30-vs-step100.json`에 수치를 남겼다.
+
+| 100step 구간 | 평균 train loss | 구간 마지막 loss | 마지막 logged LR |
+| --- | ---: | ---: | ---: |
+| 1–25 | 0.264692 | 0.1021 | 0.00016000 |
+| 26–50 | 0.088124 | 0.0593 | 0.00010737 |
+| 51–75 | 0.088280 | 0.0704 | 0.00005474 |
+| 76–100 | 0.081148 | 0.0860 | 0.00000211 |
+
+이 표는 학습 loss 구간 집계이며 validation loss가 아니다. 원본과 기준30step의
+설정을 유지해 validation 및 W&B를 새로 켜지 않았다.
+약400회 표본 제시이며8,525건 전체를 한 epoch 학습한 결과도 아니다.
+
+GPU는 같은 RTX A6000 49,140MiB·driver595.84다. Python3.12.13,
+Torch2.14.1+cu130, Triton3.8.0, Transformers4.56.2, TRL0.22.2,
+Unsloth2026.9.14와 Zoo2026.9.9를 그대로 사용했다.
+113개 package version 및 기록된 Git provenance 대조와 `uv pip check`가
+통과했다. native peak reserved memory는19.295GiB이며 종료 후209MiB로 복귀했다.
+cache revision은 `093fba6992ef5a7152481afec0bdfca1ac486998`, 저장 adapter SHA256은
+`4f0280021be433758f7ee6e1fc8d09f22846286ab6967892bd0cdbae9691b4b9`다.
+
+#### 같은 생성 실험표의 최종 결과 — 20/20
+
+각 행은 같은 validation2건이며 token 수는 양성/음성 순서다.
+`판단 schema`는 정확히 assessment 하나만 갖는 유효 final이며,
+JSON 문법만 정상인 출력과 원천 라벨 일치를 별도로 평가했다.
+
+| 모델 | 생성 상한 | 판단 schema | 원천 라벨 일치 | TP / TN / FP / FN | invalid / uncertain | EOS / 상한 종료 | 실제 token 수 |
+| --- | --- | ---: | ---: | --- | --- | --- | --- |
+| base | 128 | 0/2 | 0/2 | 0 / 0 / 0 / 0 | 2 / 0 | 0 / 2 | 128 / 128 |
+| base | 512 | 1/2 | 0/2 | 0 / 0 / 0 / 0 | 1 / 1 | 1 / 1 | 512 / 479 |
+| base | 2,048 | 1/2 | 0/2 | 0 / 0 / 0 / 1 | 1 / 0 | 2 / 0 | 191 / 319 |
+| base | 65,536 | 1/2 | 1/2 | 1 / 0 / 0 / 0 | 1 / 0 | 2 / 0 | 566 / 337 |
+| base | context-minus-input | 2/2 | 2/2 | 1 / 1 / 0 / 0 | 0 / 0 | 2 / 0 | 464 / 235 |
+| adapter100 | 128 | 0/2 | 0/2 | 0 / 0 / 0 / 0 | 2 / 0 | 0 / 2 | 128 / 128 |
+| adapter100 | 512 | 2/2 | 2/2 | 1 / 1 / 0 / 0 | 0 / 0 | 2 / 0 | 424 / 250 |
+| adapter100 | 2,048 | 1/2 | 0/2 | 0 / 0 / 0 / 1 | 1 / 0 | 2 / 0 | 1,062 / 648 |
+| adapter100 | 65,536 | 2/2 | 1/2 | 1 / 0 / 1 / 0 | 0 / 0 | 2 / 0 | 517 / 550 |
+| adapter100 | context-minus-input | 1/2 | 1/2 | 1 / 0 / 0 / 0 | 1 / 0 | 2 / 0 | 1,222 / 752 |
+
+최대 문맥은 입력293/235token을 뺀 `max_new_tokens=130779/130837`로
+그대로 적용했다. 모든15개 native EOS 종료와5개 token-budget 종료를 확인했다.
+외부 timeout·forced EOS는 없었고13만token을 소진한 호출도 없다.
+native EOS로 끝났다는 사실만으로 schema·판단 품질을 합격 처리하지 않는다.
+
+#### 30step 대비 결과와 실패 구분
+
+| 생성 상한 | adapter30 schema | adapter100 schema | adapter30 라벨 일치 | adapter100 라벨 일치 |
+| --- | ---: | ---: | ---: | ---: |
+| 128 | 0/2 | 0/2 | 0/2 | 0/2 |
+| 512 | 0/2 | 2/2 | 0/2 | 2/2 |
+| 2,048 | 2/2 | 1/2 | 2/2 | 0/2 |
+| 65,536 | 2/2 | 2/2 | 2/2 | 1/2 |
+| context-minus-input | 2/2 | 1/2 | 2/2 | 1/2 |
+
+이번 반복에서512는 좋아졌지만2,048·65,536·최대 문맥의 원천 라벨 일치는
+기준30step보다 낮았다. 100step이 일관된 생성 품질 개선을 보였다고 결론
+내리지 않는다. native sampling RNG를 새로 고정하지 않았고, 변경하지 않은
+base에서도 schema7→5·라벨 일치4→3이라는 호출 집계 변화가 있었다.
+같은2건을5개 예산에서 반복한 합계이므로 독립10건 accuracy로 해석하지 않는다.
+이번 차이만으로100step 과적합이나 step 수만의 인과도 확정하지 않는다.
+
+실제 실패는 다음처럼 구분한다.
+
+- adapter128 두 건은 analysis 중 budget을 소진했다.
+- adapter2048 양성은 `not_observed`를 반환해 원천 라벨 기준FN이다. 음성은 tool request 후 `<|call|>`로 끝나 판단 final이 없다.
+- adapter65536 음성은 `present`를 반환해 원천 라벨 기준FP다.
+- adapter 최대 문맥 음성은 JSON 문법이 정상이고 assessment 값도 원천 라벨과 같지만, `target_cwe`·`source_code`를 추가했다. assessment-only 계약 위반이므로 schema 실패이며 유효 라벨 일치에 포함하지 않는다.
+- base2048·65536 음성도 tool request로 종료했다. 도구를 실제로 실행하지 않았다.
+
+literal marker 검사가 final을 누락한 것은3건이다. base512 음성,
+base2048 양성, adapter 최대 문맥 음성이다. 앞의 두 건은 schema가 유효하고,
+마지막은 final을 추출해도 추가 필드 때문에 schema가 무효다.
+원문·token IDs·initial matcher 결과를 보존하고 공식 Harmony parser로
+final 존재·JSON 문법·schema·라벨 일치를 각각 기록했다.
+모든 실패가 parser 문제이거나 토큰 상한 부족이라고 설명하지 않는다.
+후보 라벨은 미검수이고 test500은 계속 사용하지 않았으므로 전체 판단 품질은
+이2건 진단으로 확정하지 않는다.
+
+#### 보고서·재현·완료 검사
+
+새 실험 폴더의 `analysis.md`·`.json`은100step의 실제 학습·입출력·confusion·
+실패·제한 보고서이고, `step30-vs-step100.md`·`.json`은 기준30step과의
+같은 조건 비교표 및 LR 파생 차이다. 최종 생성 표는
+`scored-results.md`·`.json`이며 raw20개 JSON/TXT,3개 generate log,
+원본·실행 AST, native training.json 및 저장 adapter를 보존했다.
+`results.md`·`.json`의 literal matcher 관측은 별도로 유지한다.
+
+```bash
+cd outputs/cc-official-tutorial-v5-max-steps-100-20261004-v1
+../../experiments/cc-official-tutorial-v5-score/.venv/bin/python score.py
+../../experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python audit.py
+../../experiments/cc-official-tutorial-v5-score/.venv/bin/python analyze.py
+../../experiments/cc-official-tutorial-v5-score/.venv/bin/python compare.py
+```
+
+`audit.json`은100step·유한한 loss/gradient100건·같은 초기 LoRA 해시·
+같은 SFTConfig·native10,000건 mask·saved tensor/parameter 수·20호출 완료·
+같은 input IDs·native sampling/EOS·요청 예산/실제 token 수·외부 제한 없음의
+대조를 통과했다. 관측/평가/비교 코드의 Ruff·구문 검사와 설정 JSON 검사,
+parser pytest9건, `git diff --check`도 통과했다. 환경 및 실행 파일의 해시는
+새 manifest로 보존하며 기존30step manifest와 artifact는 수정하지 않는다.
+
+### 2026-10-05: official-tutorial-max-steps-100-error-analysis-serving-comparison
+
+사용자는 vLLM 서빙에서 GPT-OSS-20B가 CWE 기반 분류·선정 이유·추천 사항을
+잘 제공했던 관측과, 최근 학습 결과를 “안 됐다”고 표현한 이유의 차이를 설명해
+달라고 요청했다. 이론과 원문 증거, 확인된 사실과 가설을
+[GPT-OSS 서빙·판단 학습 오류 분석](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md)에 기록했다.
+실험 수치와 조건의 정본은 앞의 공식30/100step 실행 기록으로 유지한다.
+
+100step 학습은 완료됐고, 최종 trainable tensor3,264개 중3,178개가 변경됐다.
+전체20호출은 고유 validation2건을 반복한 결과다. 오류 분류는 다음과 같다.
+
+| 분류 | base | adapter | 전체 |
+| --- | ---: | ---: | ---: |
+| 생성 예산 소진, final 없음 | 3 | 2 | 5 |
+| tool handoff, final 없음 | 2 | 1 | 3 |
+| 추가 필드의 schema 위반 | 0 | 1 | 1 |
+| 원천 라벨 기준 FN | 1 | 1 | 2 |
+| 원천 라벨 기준 FP | 0 | 1 | 1 |
+| 유효한 uncertain 보류 | 1 | 0 | 1 |
+| schema 유효 + 원천 라벨 일치 | 3 | 4 | 7 |
+
+literal final 검사의 누락3건은 기존 Harmony 재평가에 이미 반영됐다.
+이를 모델의 실행 오류와 섞지 않는다. 원문에서는 CWE-252 의미의 잘못된 회상,
+analysis의 결론과 final assessment 불일치도 확인했다. source-label match가
+곧 올바른 설명을 생성했다는 뜻은 아니다. v5 target은 판단 한 필드이고
+선정 이유·추천 정답 및 지표는 없으므로, vLLM 성공의 목표와 다르다.
+
+CPU tokenizer 검사에서 tools 인자를 주지 않은 기본 호출에도 현재 template가
+functions 호출 채널 안내를 렌더링함을 재현했다. 함수 정의는 없는 상태다.
+이 안내의 tool handoff 인과, 빈 analysis 학습과 실제 analysis 생성의 분포 차이,
+양자화/엔진 차이 및100step 과적합은 미검증 가설로 남겼다.
+이전 vLLM 사례의 checkpoint·요청·응답·옵션은 이번 분석에서 확보되지 않았고,
+같은 조건의 vLLM 대조를 수행한 것은 아니다.
+
+추가 근거는 Git 제외 경로
+`outputs/cc-official-tutorial-step100-error-analysis-20261005-v1/`의
+`evidence.json`, `tokenizer-audit.json`, 수집/CPU 검사 스크립트와 로그다.
+30step97개·100step104개 원 manifest artifact hash를 재확인했고 모두 일치했다.
+새 학습·모델 생성·서빙은 실행하지 않았고, 기존 조건·adapter·원 출력을 보존했다.
+문서의 후속 실험표는 제안이며 실행 완료 결과로 표기하지 않는다.
+
+### 2026-10-05: native-step100-forward-and-decision-token-audit
+
+사용자의 원인 재검토 요청에 따라 실행 완료와 실제 학습 정합성을 구분했다.
+원 30/100스텝 실험은 보존했으며 새 학습·backward·optimizer·자유 생성은 0회다.
+자세한 방법·제한은 [서빙/학습 분석 11절](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#11-2026-10-05-전체-입출력과-실제-forward-재점검)에 기록한다.
+
+- train10,000/validation1,000의 canonical→decision 연결, train 사본, 실제 두 native
+  Arrow cache의 input IDs·labels 모든 위치를 대조했다. 불일치0건, 유효 인덱스8,525건 일치.
+- 기존40회 생성은 고유 validation2건이다. 전체 원문·입력·정답·final을 연결한
+  `outputs/cc-official-tutorial-v5-input-output-audit-20261005-v1/review.html`을 만들었다.
+- 100스텝 종료 hash→저장 파일→재로딩 LoRA3,264tensor 모두 일치하고 finite다.
+- 4건×3모드 forward에서 직접 hidden state/LM head로 구한 shifted CE와 model loss가
+  최대 약4.5e-8 차이로 일치했다. 과거 구환경의 수십 배 train/eval 차이는 이4건에서
+  재현되지 않았다. 구환경 문제가 해결됐다는 소급 판정이나 전체 runtime 정상 판정은 아니다.
+
+**진단 조건:** validation 파일 순서에서 라벨별 첫50건, 전체 렌더링≤1,024토큰,
+정답 final 접두사를 이미 제공한 teacher-forced forward, 두 라벨 첫 token의 조건부
+logit 비교, 동률→not_observed. 기존 bare-assistant generation table 및 test500과
+분리한다. 미검수 원천 라벨이며 통계적 일반화나 자유 생성 성능을 주장하지 않는다.
+
+| 실험 타입 | 모델 | 표본 | 평균 sequence loss | 정답 token 적중 | 조건부 두 라벨 일치 | 양성 재현율 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| native-step100-forward / final-prefix / decision-token-probe | base | 100 | 1.261358 | 601/800 | 47/100 | 7/50 |
+| native-step100-forward / final-prefix / decision-token-probe | adapter100 | 100 | 0.089278 | 756/800 | 56/100 | 10/50 |
+
+adapter confusion은 TP10/FN40/FP4/TN46이며 86건을not_observed로 선택했다.
+판단 분기100token 이외700token은 전부 맞혔다. 그래서94.5% token 적중과0.089loss가
+핵심 판단56%와 동시에 나타난다. base는 무제약 첫 판단 token이98건에서 두 라벨
+밖이었으므로47%를 자유 생성 정확도로 해석하지 않는다. adapter는100건 모두
+두 라벨 안에 있었고 조건부 선택과 같았다.
+
+정답 이외의 고정 토큰은 완벽하고 두 라벨만0.5/0.5인 가상 기준의 sequence loss는
+0.088019다. 계산상 참고값이며 실측 모델이 무작위라는 증명은 아니다. 낮은loss를
+판단 학습 성공으로 간주할 수 없다는 해석상의 문제를 직접 수치화했다.
+
+남은 원인 후보는 약400회 표본 제시/0.0469epoch의 학습량, 1,024상한으로 제외된
+1,475건과 부분정답15건, 희소CWE(CWE252는 유효train 양성2건), empty-analysis
+final-only 학습과 medium-analysis 자유 생성의 조건 차이다. 각각 사실은 확인했으나
+오류에 대한 기여도는 통제 실험 전이다. 설정·데이터·생성 조건은 임의로 수정하지 않았다.
+
+추가 미래token 치환 검사에서는 eval 경로의 앞선logit 차이가0이었고 train 경로에서
+0.09375~0.140625 차이가 관측됐다. 전체prefix 추적의 최초 차이는 layer5 MLP
+4.77e-7이며, 이후 MoE와 attention을 통해 전파됐다. 같은 입력 반복은 정확히 같았고
+진단 예의 판단은 유지됐다. MoE 수치 민감도를 분리 검증할 과제로 남기며, 이를
+attention mask 누출이나 품질 실패의 주원인으로 확정하지 않는다. 최초 eval+grad
+진단은out=matmul의autograd 제약으로 실패했고, 원 학습 실패와 구분해 보존했다.
+
+재현물: `outputs/cc-native-forward-diagnostic-20261005-v1/`의 스크립트·원 로그·
+`summary.json`·`probe-inputs.json`·`probe-base.json`·`probe-adapter.json`·
+`mode-matrix.json`·`causal-prefix-repeat.json`. 원 native 가상환경/RTX A6000/캐시
+NF4 base/원100step adapter를 사용했다. 30step97개·100step104개 manifest artifact
+hash가 모두 일치했고 test500은 사용하지 않았다. 별도 보고서11.6에 버전·경로·명령을 기록했다.
+
+#### 2026-10-05: Astra 100스텝 원인 분석 재검토
+
+이전 진단의 원본 JSON을 다른 스크립트로 재집계했다.
+`outputs/astra-step100-report-review-20261005-v1/review.json`에 입력 ID와
+원천 라벨, loss·토큰·판단 결과 검산을 기록했다. base47/100, adapter56/100,
+adapter TP10/FN40/FP4/TN46 및756/800 token은 원자료와 일치한다.
+train–validation의 동일 `(CWE, source_code)` 0건, 선정100건의 train 중복0건이다.
+쌍별 개선15건·악화6건이며 탐색적 정확 검정 p≈0.0784다.
+[분석 보고서 11.7절](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#117-astra-원인-분석의-2차-확인)에
+측정 사실과 아직 입증되지 않은 인과를 분리했다. 새 학습·GPU 추론·test500 사용은 없다.
+
+
+### 2026-10-05: native-step100-max-new-tokens-130000-confusion-matrices
+
+사용자가 생성 상한별 confusion matrix와13만token 조건 추가를 요청했다.
+기존100step native 생성표5조건을 보존하고 `max_new_tokens=130000` 고정 조건을
+동일 base/adapter·동일 frozen validation2건에 추가했다. 총4회 새 생성이며 새 학습은0회다.
+기존 최대 문맥 조건은131072−입력으로 실제 상한130779/130837이었다.
+따라서130000고정은 별도6번째 조건이다. 각 조건은 양성1건·음성1건으로,
+앞선 teacher-forced validation100 진단과 다른 자유 생성 평가다. 원천 라벨은 미검수다.
+
+입력IDs·native generation_config가 기존 실행과 정확히 같음을 검사했다.
+sampling 기본값·medium reasoning·native EOS를 유지했고 외부timeout/forced EOS는 없다.
+RNG를 조건별로 되감지 않았으므로 상한별 출력은 동일 생성문을 잘라 비교한 결과가 아니다.
+새13만조건의 실제 생성량/시간은 base485/338token,83.56/57.28초;
+adapter1351/366token,259.46/71.66초이며 모두 native EOS로 종료됐다.
+13만token 전부를 생성한 실행은 아니다. model runtime 문맥은131072다.
+
+아래는 **final JSON의 assessment 값만 집계한 판단 행렬**이다. 추가 필드가 있어도
+판단값은 읽으며, JSON schema 위반은 별도 열에 기록한다. final 없음·도구 요청·
+파싱 실패를 not_observed로 변환하지 않고 판단 불가로 남긴다.
+
+| 생성 상한 | TP | FN | FP | TN | uncertain | final 판단 불가 | 읽을 수 있는 판단의 형식 위반 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 128 | 0 | 0 | 0 | 0 | 0 | 2 | 0 |
+| 512 | 1 | 0 | 0 | 1 | 0 | 0 | 0 |
+| 2048 | 0 | 1 | 0 | 0 | 0 | 1 | 0 |
+| 65536 | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| 131072 − 입력 (130779/130837) | 1 | 0 | 0 | 1 | 0 | 0 | 1 |
+| 130000 | 0 | 1 | 0 | 1 | 0 | 0 | 1 |
+
+최대 문맥의 음성 응답은not_observed를 맞혔지만 추가 필드로 schema에 실패했다.
+130000의 양성 응답은not_observed로 틀렸고 potential_vulnerabilities 추가 필드도
+포함했다. 엄격한 schema 기준에서는 이 둘을 invalid로 분류하므로 각각의 행렬도
+함께 저장했다. 세부 base/adapter2×4행렬과 두 채점 기준을 선택하는 로컬 HTML은
+`outputs/cc-step100-max-new-tokens-130000-confusion-matrix-20261005-v1/confusion-matrices.html`이다.
+동일 폴더의JSON/Markdown·generate.py·aggregate.py·verify.py·request.json·
+packages.json·runtime정보·원 출력·로그가 재현 자료다.
+
+재현 명령은 해당 새 실험 폴더에서 native 가상환경의 `generate.py --model base`,
+`generate.py --model adapter`와 scorer 가상환경의 `aggregate.py`, Python3의
+`verify.py`다. native환경은 기존tutorial venv이고 scorer는 기존cc-official-tutorial-v5-score venv다.
+Unsloth2026.9.14/zoo2026.9.9/Transformers4.56.2/torch2.14.1+cu130/TRL0.22.2/
+PEFT0.21.2/bitsandbytes0.50.2/Python3.12.13, RTX A6000을 사용했다.
+원30step97개·100step104개 manifest artifact hash, 원adapter hash가 그대로임을 확인했다.
+각 행렬의총수2·새조건4회완료·입력과native기본값일치 검증을 통과했다.
+HTML의 브라우저 자동 렌더링 검사는 하지 않았으며test500은 사용하지 않았다.
+
+### 2026-10-05: native-step100-validation100-token-caps — 평가 표본 수 정정
+
+사용자가 각 생성 조건에 100건이 있어야 한다고 지적했다. 직전 생성표는 기존
+설정의 `sample_ids` 2건을 그대로 사용한 스모크 평가였다. 별도의 100건 판단
+진단은 teacher forcing이며, 생성 길이별 100건 평가를 수행한 것이 아니었다.
+기존 2건 기록은 그대로 보존하고 아래 새 실행에서 평가 범위를 정정한다.
+
+| 항목 | 새 실행 조건 |
+| --- | --- |
+| 학습 | 기존 공식 tutorial 데이터 교체·100step adapter 사용, 추가 학습 0회 |
+| 입력 | 같은 validation 100건, 원천 라벨 present50 / not_observed50 |
+| 선정 | 앞선 probe-inputs.json의 ID만 재사용; 원천 validation 순서에서 전체 학습 렌더링 1024 이하인 라벨별 첫50건 |
+| 생성 입력 | 원 system/user만 사용; 정답·teacher-forced tokens·final prefill 제외 |
+| 생성 상한 | 128 / 512 / 2048 / 65536 / 130000 / 131072−입력 |
+| 모델 | 같은 base와 기존100step adapter, 각600회·총1200회 |
+| 기본값 | native sampling·medium reasoning·native EOS 유지, 별도시간제한 없음 |
+| 채점 | 공식 Harmony parser; final assessment 행렬 및 엄격한 schema 행렬 병기 |
+| 집계 | 각 조건100건, uncertain/invalid/pending 분리; 미완료를 invalid로 세지 않음 |
+
+선정100건은 짧은 입력에 한정된 균형 진단 표본이다. validation1000 전체나
+held-out test500 성능으로 일반화하지 않는다. 입력232–980tokens로 고정130000
+조건도 전체문맥131072 안에 들어간다. train과 선정 입력의 ID 및 user내용 중복은0이다.
+test500은 읽지 않는다. 원천 라벨·CWE는 미검수 상태다.
+
+설정: `configs/cc_native_step100_validation100_token_caps_v1.json`.
+실행기: `scripts/run_cc_native_validation100.py`.
+출력: `outputs/cc-native-step100-validation100-token-caps-20261005-v1/`.
+`prepared.json`에 데이터·선정ID·입력·정답·adapter hash와 계획1200회를 기록했다.
+각 출력은 atomic JSON으로 저장하며 `progress.json`과 `confusion-matrices.json/.md`로
+진행률을 확인한다. 완료된 출력을 덮어쓰지 않고 미완료분만 재개한다.
+Sampling RNG는 조건마다 초기화하지 않는다. 재개 프로세스는 새 native RNG를
+사용하며 각 출력의 run_id로 구분한다. 따라서 상한별 결과는 같은 생성열의 접두사가 아니다.
+
+재현 명령:
+
+```bash
+experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python scripts/run_cc_native_validation100.py prepare
+experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python scripts/run_cc_native_validation100.py run
+experiments/cc-official-tutorial-v5-score/.venv/bin/python scripts/run_cc_native_validation100.py score
+```
+
+prepare는 최초1회만 실행하며 재시작은 run만 실행한다. 기존 native/scorer환경과
+RTX A6000을 사용한다. 라이브러리 버전은 직전130000실험과 동일하며
+packages.json 및 model별 runtime JSON으로 기록한다. 자동 채점은 최초1건,
+이후10건마다 및 전체 완료 시 갱신한다. **1200회 완료 전에는 100건 결과로 보고하지 않는다.**
+
+#### 2026-10-05: 실행 중인 평가의 W&B 연결
+
+사용자가 W&B 미전송을 지적하여 저장된 평가 결과의 후등록과 이후 자동 기록을
+추가했다. 생성 프로세스·학습·입력·예산·기본값은 변경하지 않고 별도 CPU sidecar가
+`confusion-matrices.json`을 읽는다. W&B project/group은 기존 `aegislm` / `source-v2`,
+job_type은 evaluation이다. 이번 run은 학습loss를 기록한 run이 아니다.
+모델/조건별 완료·남은 수, semantic/strict 판단행렬을 기록하며 조건100건 완료 시
+안전한 사례 table과 두 기준의 confusion chart를 추가한다. 미완료를 invalid로 세지 않는다.
+로컬 raw 코드·생성 원문·token IDs·자유문 오류는 전송하지 않는다.
+
+명령: `uv run python scripts/track_cc_native_validation100.py --wandb`.
+기존 .env 인증을 사용하고 tracking lock/receipt를 유지한다.
+W&B run ID/URL은 출력 폴더의 `wandb-link.json`, 전송 상태는 `wandb-progress.json`,
+SDK로그는 `wandb-sidecar.log`, lifecycle영수증은 `evaluation.wandb.json`에 남긴다.
+전송 불확실 상태의 재실행은 원격 확인 후 명시적 `--wandb-reconcile`을 요구한다.
+원본 실험 artifact는 Git 제외 경로에 보존한다. 세부 전송 필드는 EVALUATION_PLAN의
+native tutorial validation100 generation tracking 절에 정의한다.
+
+실제 online run은
+[cc-native-step100-validation100-token-caps](https://wandb.ai/erad3254-looking-for-a-job/aegislm/runs/source-v2-evaluation-9d30dc7ec1290bd4)다.
+2026-10-05T13:16:19Z에 sidecar를 시작하여 당시 채점 완료된170회를 후등록했고,
+adapter128조건100건의 사례 table·semantic/strict confusion chart를 추가했다.
+이후 채점 snapshot 변경을10초마다 확인하여 새 기록을 전송한다. 채점 자체는
+기존 생성기의10건마다 갱신 조건을 따른다. 학습 완료시점의 W&B run으로
+위장하지 않으며 `recording_mode=saved-evaluation-backfill-and-live-snapshots`를 기록했다.
+추가검사: pytest544개 통과, 변경파일ruff/mypy 통과. 생성 PID84337은 유지했고
+별도 CPU tracking PID108432를 사용했다. raw 코드·로그·출력의 원격 업로드는 없다.
+
+#### 2026-10-06: native-validation100 OOM 조사
+
+원실행은2026-10-06 00:05:39 KST에 adapter65536 조건의 세 번째 입력에서
+CUDA OOM으로 중단됐다. 128/512/2048각100건과655362건,전체302/1200건 완료다.
+base와130000·최대문맥 조건은 미실행이다. 새 프로세스에서 같은825token 입력과
+65536예산으로 동일OOM을 재현했고 실제StaticCache66360칸을 관찰했다.
+prefill의eager attention FP32 임시배열 추정13.0529GiB가 요청13.05GiB와 일치한다.
+실제6만token 생성누적, 학습실패 또는타프로세스경합으로 설명할 필요가 없다.
+
+세부는 [원인 보고서11.10절](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#1110-2026-10-06-validation100-native-생성-oom의-직접-원인)에
+기록한다. GPU진단은같은native환경·RTX A6000·원adapter·원frozen token을 쓰며
+새학습0회, 생성조건변경0회다. 실패시progress.status가running으로 남는 별도버그를
+수정하고 현재상태는failed로 정정했다. OOM입력은완료/invalid로 변환하지 않는다.
+마지막10건단위 채점에는300건만 반영되어 원snapshot을 보존한 뒤 실제302건으로
+동일Harmony parser를 사용해 로컬평가를 갱신했다. 원출력과error는 보존한다.
+W&B의기존run에는history를재생하지 않고302건부분평가·OOM진단 scalar를
+summary정정으로 기록한다. sidecar는 generation-failed 상태로 종료됐다.
+실험 전체를 완료했다는 의미가 아니다. 상한/시간/EOS를 임의로 줄이지 않았고
+재실행 전에는 chunked prefill 등 별도 추론조건을 검증해야 한다.
+
+#### 2026-10-06: fresh-process-per-model-budget-v2 — 생성 상한별 초기화
+
+사용자 확정 조건: 독립변수인 최대 생성 길이가 바뀌면 모델을 처음 GPU에 올리는
+상태로 돌아간다. 기존 v1은 모델당 한 번 로드한 뒤 상한을 연속 순회했으므로
+이 조건을 충족하지 못했다. 원본 302건은 보존하고 v2와 합산하지 않는다.
+코드 감사·검증·제한은 [오류 분석 11.13절](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#1113-2026-10-06-생성-상한-변경-시-모델-재로딩-여부-감사와-수정)에 기록한다.
+
+| 조건 | 고정하거나 변경하는 값 |
+| --- | --- |
+| 독립변수 | max_new_tokens 128 / 512 / 2048 / 65536 / 130000 / context-minus-input |
+| 초기화 경계 | 모델 × 생성 상한마다 새 spawn 프로세스, 이전 프로세스 종료 후 시작 |
+| 조건 내부 | 같은 validation 100건(50:50), 순서 고정, 모델을 유지하며 순차 평가 |
+| 학습 산출물 | 기존 공식 recipe의 100-step adapter, 새 학습 없음 |
+| 생성 고정값 | native sampling/EOS, runtime context 131072, timeout 없음, 추가 generate kwargs 없음 |
+| 실패 / 재개 | 실패 시 순회 중단, 완료 조건만 skip 가능; 부분 조건 이어붙이기는 거부 |
+| 현재 상태 | 입력 준비 및 CPU 검증 완료; v2 GPU 생성 미실행 |
+
+설정: `configs/cc_native_step100_validation100_fresh_process_v2.json`.
+출력: `outputs/cc-native-step100-validation100-fresh-process-20261006-v2/`.
+기존과 다른 설정 키는 experiment_id/output_dir/execution_protocol뿐이며
+동결 입력과 정답·adapter 등 7개 hash는 v1과 같다. 입력 길이 232–980, 계획 1200호출.
+
+실행기는 `scripts/run_cc_native_validation100.py`의 prepare/run/score로 구분한다.
+현재 v2 prepare는 완료됐다. 향후 GPU 실행 명령은 아래와 같으며 이번 감사에서는
+실행하지 않았다. 원래 native 환경을 사용하고 scorer는 기존 Harmony 전용 환경이다.
+
+```bash
+experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python scripts/run_cc_native_validation100.py run --config configs/cc_native_step100_validation100_fresh_process_v2.json
+```
+
+W&B sidecar도 동일 v2 config를 지정해야 하며 새 실험 identity로 scalar/표만 기록한다.
+runner와 tracker 기본 config는 v2로 일치시켰다. 기존 v1 재채점에는 v1 config를 명시한다.
+프로세스 종료는 디스크 캐시나 다른 GPU 사용자를 초기화하지 않으며, 공식 sampling의
+seed 정책도 그대로다. 조건 내부 메모리 누적과 seed 통제는 별도 연구 항목이다.
+신규 조건별 PID/종료코드/로드 메모리는 conditions 아래에 보존한다.
+이 수정으로 기존 단일 요청 OOM이 해결됐다고 주장하지 않는다.
+
+#### 2026-10-06 작업 인계: Astra 수정본 재검토
+
+현재 저장소의 v2 코드는 조건별 프로세스 분리를 구현했고 입력 준비만 완료했다.
+사용자가 Astra 수정본으로 지정한 실행 코드와 11.13절 보고서를 대조했다.
+[11.14절 인계 기록](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#1114-2026-10-06-실행-코드-재검토와-작업-세션-인계)에 결과와 한계를 남겼다.
+현재 v2 평가 0/1200, GPU 재로딩 실측 및 65536 이상의 OOM 해결은 미검증이다.
+이번 재검토에서는 생성 실패 직후 마지막 부분 결과도 채점하도록 보완했다.

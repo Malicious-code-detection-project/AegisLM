@@ -1,0 +1,39 @@
+{
+  "recipe": "cc_tutorial_final_only_eos_v1",
+  "experiment_id": "cc-tutorial-final-only-eos-20261004-v1-attempt-v3",
+  "title": "sfttrainer-final-only-mask-eos-return (max-new-tokens-65536)",
+  "source_config": "configs/cc_source_decision_v5.json",
+  "source_config_sha256": "110556faff331fdf30f9205b8b793c0ff37e7ea112958ddb4310dd2ba2c4918c",
+  "reference_dir": "outputs/cc-max-new-tokens-65536-20261003-v1",
+  "reference_comparison_sha256": "7d837ed72953880b1f1f86e1085e467724e4a350e7896f71b85586184f174394",
+  "tutorial_receipt": "outputs/unsloth-official-gpt-oss-20b-tutorial-20261004-v1/receipt.json",
+  "tutorial_commit": "92e38e86308748d18fc4cd4b104c4c6d3db1d67e",
+  "output_dir": "outputs/cc-tutorial-final-only-eos-20261004-v1/run-v3",
+  "adapter_dir": "adapters/cc-tutorial-final-only-eos-20261004-v1-attempt-v3",
+  "checkpoint_dir": "checkpoints/cc-tutorial-final-only-eos-20261004-v1-attempt-v3",
+  "training": {
+    "max_seq_length": 4096,
+    "batch_size": 1,
+    "gradient_accumulation_steps": 32,
+    "max_steps": 100,
+    "learning_rate": 0.0002,
+    "warmup_steps": 5,
+    "weight_decay": 0.001,
+    "lr_scheduler_type": "linear",
+    "lora_r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0,
+    "seed": 3407,
+    "eval_steps": 25
+  },
+  "generation": {
+    "max_new_tokens": 65536,
+    "runtime_context_length": 131072,
+    "max_time_seconds": 300,
+    "sample_count": 2,
+    "start_protocols": ["bare-assistant", "final-prefill"],
+    "eos_token_ids": [200002, 199999],
+    "answer_end_token_id": 200002,
+    "force_eos": false
+  }
+}

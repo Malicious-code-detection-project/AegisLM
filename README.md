@@ -18,6 +18,67 @@ Unsloth 100-step 본 학습을 완료했습니다. 평균 학습 loss는 0.20977
 현재 실행 경로는 `cc-decision-20261002-v7`입니다. base는 128-token 예산에서
 100건 모두 final JSON을 생성하지 못했습니다. test500 품질 비교는 아직
 실행하지 않았으며, 이전 batch2 수치 비교 실패도 진단 이력으로 남아 있습니다.
+2026-10-03에는 `max-new-tokens-65536` 생성 한도 비교 실험도 완료했습니다.
+동일 validation2건에서 base는 2,048/65,536 한도로 JSON1건이 회복됐지만
+adapter는 모든 한도에서 JSON0건이었고 message/channel token 반복이 나타났습니다.
+전체 문맥 한도131,072와 생성 상한65,536을 구분해 기록했으며, 실험표·가설·
+중간 실패·재현 자료는 아래 실행 안내의 `max-new-tokens-65536` 절에 보존합니다.
+2026-10-04에는 공식 Unsloth GPT-OSS-20B 예제를 기준으로 재시작하기로 했습니다.
+공식 노트북·Python 예제·출처와 hash를 확보하고 기존 경로와 차이를 기록했습니다.
+세부 내용은 [공식 예제 확보 기록](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-unsloth-official-gpt-oss-20b-reference)을 참고합니다.
+기존 학습 코드와의 CPU 비교에서는32건의 입력 마스킹·EOS는 정상이었고,
+공식 final-only mask와 달리 빈 analysis 및 final header9토큰도 학습했습니다.
+이 차이의 인과는 미확정이며, [코드 비교 기록](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-final-only-mask-vs-empty-analysis-code-review)에 확인된 평가 설정 문제와 함께 남겼습니다.
+공식 예제의 SFTTrainer/final-only 경로와 native EOS 비교를 위한 새 recipe는
+[실험 실행 기록](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-sfttrainer-final-only-mask-eos-return)에 기록합니다.
+GPU 사전 검사 통과 후100-step 학습과 최종 어댑터 저장을 완료했습니다.
+평균 학습 loss는0.119957, 최종 검증 loss는4.981067로 차이가 큽니다.
+저장한 어댑터를 새 프로세스에서 불러온 동일 validation2건 비교에서
+bare-assistant는 둘 다 analysis 반복 후 시간 제한에 도달했습니다.
+gold-free final-prefill은 둘 다 JSON/schema 및 원천 라벨이 일치했고,
+7/9토큰 뒤 native return으로 종료했습니다. 기존8행에 새2행을 추가했습니다.
+이는 시작 형식의 영향에 대한 진단이며, 표본2건으로 품질 합격을 주장하지 않습니다.
+같은 날 [context-window-max-131072 실험](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-context-window-max-131072-generation-experiment)도 완료했습니다.
+입력을 뺀 최대 생성 상한130,770–130,837을 적용했지만 adapter/bare는
+같은 출력 접두부를 반복하다300초 제한에 걸렸고, final-prefill은 이전과 같은
+7/9토큰으로 종료했습니다. 실제 최대 길이까지 생성한 실험은 아닙니다.
+이후에는 [원본 튜토리얼 학습·최대 생성 상한 실험](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-unsloth-original-max-new-tokens-131072-training)을 분리했습니다.
+원본 Multilingual-Thinking 데이터와1,024-token/30-step 설정으로 새 학습을
+완료했고, 평균 loss는1.024378입니다. 로컬 compiler 호환 오류의 실패 이력을
+보존하고 Unsloth의 compiler-off 경로를 사용했습니다. 동일 runtime의
+base/adapter8조건 비교도 완료했습니다. 최대 생성 예산130,950의4조건은
+모두600초 제한에 도달했고 adapter medium만 부분 final이 있었으며,
+native EOS는0/4입니다. 실제 생성량은약3,000으로 최대 길이를 소진한 검증은
+아닙니다. 이 수학 시연을 C/C++ 판단 품질 비교와 구분해 기록합니다.
+이전 실험의 600초 제한은 사용자가 승인하지 않은 조건 변경이었으므로,
+생성 상한만 바꾼 공식 재현 결과로 간주하지 않습니다.
+[공식 튜토리얼 그대로의 새 실행](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-unsloth-official-tutorial-generation-64)은
+새 독립 환경에서 학습1,024토큰·30스텝, 원본 생성5회·64토큰을 완료했습니다.
+compiler 우회와 외부 시간 제한 없이 평균 train loss1.003214를 기록하고
+adapter를 저장했습니다. 생성5회 모두64토큰 예산을 소진해 analysis 중간에서
+끝났으며 완성된 final은 없습니다. 실제 원본 mask는 final만 직접 학습하고
+analysis는 제외하므로, 이 결과를 French reasoning 적응 성공으로 보지 않습니다.
+validation과 W&B는 원본대로 비활성입니다. 결과표·원문·라벨 검사를 보고서에 기록했습니다.
+이어서 [공식 학습에 v5 데이터를 연결하는 실험](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-official-tutorial-v5-dataset-token-caps)을 완료했습니다.
+원본1,024토큰·30스텝의 평균 train loss는0.230625입니다. 실제 유효 train은
+8,525건이며, 동일 validation2건에 공식 기본 생성과5개 토큰 상한을 적용한
+base/adapter20호출을 마쳤습니다. adapter는2,048/65,536/남은 최대 문맥 조건에서
+두 건 모두 유효 JSON과 원천 라벨 일치를 기록했습니다. 짧은 예산의 실패와
+정상 Harmony final을 누락한 평가 파서3건을 구분해 결과표에 남겼습니다.
+이는2건 진단이며 전체 test500 품질 검증은 아닙니다.
+같은 데이터·독립 환경·생성 조건에서 [max_steps만100으로 늘리는 실험](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-official-tutorial-v5-max-steps-100)도 완료했습니다.
+평균 train loss는0.130558로 낮아졌지만 생성20호출에서 일관된 품질 개선은
+확인되지 않았습니다. adapter512는 라벨 일치2/2,2048은0/2,65536·최대 문맥은
+각1/2였으며 오분류·tool request·추가 필드 실패를 구분했습니다.
+같은 초기 가중치·학습 설정·데이터·생성 코드를 대조했고30step 비교표를 보존했습니다.
+2026-10-05 [vLLM 서빙과 판단 학습의 차이·오류 분석](docs/GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md)을 작성했습니다.
+최근100step 학습은 완료됐으며, 생성 예산 소진·tool handoff·출력 계약·판단 오류와
+평가 파서의 누락을 구분했습니다. 현재 학습 target은 판단 한 필드이고 이유·추천
+사항의 학습·품질 평가와는 다릅니다. 과거 vLLM 성공 사례와의 동일 조건 비교는 미검증입니다.
+2026-10-06 코드 감사에서 생성 상한을 바꿀 때 모델을 다시 로드하지 않았음을 확인했습니다.
+모델×상한마다 새 프로세스로 평가하도록 수정하고 입력 준비·CPU 검증을 마쳤습니다.
+기존 302건은 보존했으며 새 GPU 평가는 아직 실행하지 않았습니다.
+[조건별 초기화 감사](docs/GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#1113-2026-10-06-생성-상한-변경-시-모델-재로딩-여부-감사와-수정)에 근거와 제한을 기록합니다.
 현재 명령과 결과는
 [v5 판단 학습 실행 안내](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-02-v5-decision-only-execution)에 기록합니다.
 기존 83개 데이터셋 폴더의 목적·결과·계보와 보존 조건은
