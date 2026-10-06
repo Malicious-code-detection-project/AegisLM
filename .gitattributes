@@ -1,0 +1,2 @@
+# Preserve the exact source-copy bytes and its documented SHA-256, including CRLF.
+references/이정민/raw/karpathy/llm-wiki.md -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

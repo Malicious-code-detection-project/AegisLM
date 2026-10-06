@@ -23,6 +23,9 @@ raw_datasets/
 artifacts/
 checkpoints/
 adapters/
+# Harness runtime documentation is source, not model adapters.
+!references/이정민/harness/adapters/
+!references/이정민/harness/adapters/runtime.md
 models/
 outputs/
 runs/
@@ -37,7 +40,7 @@ experiments/*
 # OS/editor files
 .DS_Store
 
-# Personal harness V3: local-only runtime state
+# Personal harness: local-only runtime state
 /.active-profile
 /.harness-local/
-/.codex/agents/v3-*.toml
+/.codex/agents/*.toml

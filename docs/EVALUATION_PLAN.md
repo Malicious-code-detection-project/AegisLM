@@ -223,6 +223,15 @@ was visible during pipeline development. The secondary set supports label
 metrics only; evidence metrics remain null and are not combined with primary
 metrics.
 
+The decision-only evaluator requires both `present` and `not_observed` in the
+gold cohort for its binary-label coverage gate. Prediction diversity does not
+satisfy that gate. Non-string `assessment` values (including arrays and objects)
+are schema-invalid predictions recorded in the report, not evaluation crashes.
+For evidence-line evaluation, the challenge's complete `numbered_source_code`
+must equal `number_source_code(private_source_code)` before scoring or rendering.
+Matching IDs and line counts alone are insufficient; mismatched inputs raise
+`ValueError` instead of producing evidence scores.
+
 Automatic source-v2 metrics:
 
 - assessment accuracy, confusion matrix, macro-F1, and per-label recall
@@ -439,3 +448,28 @@ an allowlisted scalar-only callback. The commit SHA and a dirty-worktree boolean
 are recorded manually; file names and diff contents are not. This policy follows the supported
 [W&B environment controls](https://docs.wandb.ai/models/track/environment-variables)
 and the [W&B Transformers integration](https://docs.wandb.ai/models/integrations/huggingface).
+
+### Native tutorial validation100 generation tracking
+
+The 2026-10-05 native step100 sweep uses an opt-in CPU tracking sidecar while
+generation continues unchanged. It reads saved evaluation snapshots and records
+them in an `evaluation` run, not a training run. It can backfill already completed
+evaluations; it does not recreate missing training losses or historical GPU stats.
+
+Each of the 12 model/budget groups has 100 planned cases. Upload only completed,
+pending, complete flags and the semantic/strict TP/FN/FP/TN/uncertain/invalid
+counts. Positive and negative completed counts expose partial-cohort imbalance.
+`label_match_over_completed` has the completed-case denominator and is explicitly
+partial until a group reaches 100. Pending cases never enter confusion matrices.
+
+After a group completes, its safe table columns are `model`, `generation_budget`,
+`record_id`, `expected_assessment`, `semantic_assessment`, `strict_assessment`,
+`json_valid`, `schema_valid`, `generated_tokens`, `stop_reason`. Predicted values
+are projected to present/not_observed/uncertain/invalid. Semantic and strict
+confusion charts contain only these fixed labels and counts; empty uncertain and
+invalid ground-truth rows in the square W&B chart are not extra source labels.
+Source, prompts, parsed extra fields, raw output, error messages and token IDs
+are not sent. The sidecar uses the existing project/group, privacy controls,
+deterministic evaluation receipt and exclusive ownership lock. An ambiguous
+tracking interruption requires remote inspection and explicit reconciliation,
+as with standard evaluation receipts; no automatic replay occurs.

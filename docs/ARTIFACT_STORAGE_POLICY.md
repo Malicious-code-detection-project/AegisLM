@@ -210,6 +210,13 @@ Transformers configuration collection are disabled. Local manifests remain the
 canonical link between adapters, datasets, evaluation files, and W&B run IDs;
 evaluation and comparison runs use Git-ignored digest-bound `*.wandb.json`
 receipts beside their local result files.
+
+Native tutorial validation100 evaluation may use the separately defined safe
+case columns and label/count-only confusion charts in `docs/EVALUATION_PLAN.md`.
+Its CPU sidecar reads saved evaluation snapshots for backfill and ongoing
+tracking without changing inference. W&B's table/chart media contain only the
+projected metadata and fixed labels; raw prompts, outputs and token IDs stay local.
+
 Training and gate commands use the same lifecycle with deterministic run IDs.
 Training and persisted-adapter gate receipts live beside the configured stage
 directories. Checkpoint-diagnostic receipts use the ignored

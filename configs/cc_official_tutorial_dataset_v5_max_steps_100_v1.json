@@ -1,0 +1,48 @@
+{
+  "experiment_id": "cc-official-tutorial-v5-max-steps-100-20261004-v1",
+  "title": "official-tutorial-v5-max-steps-100 (training-1024-100, generation-128-512-2048-65536-context-max)",
+  "tutorial_commit": "92e38e86308748d18fc4cd4b104c4c6d3db1d67e",
+  "tutorial_source_sha256": "74ff47bb9212f482f7378d86f27bc088973e924ae427cc84891d87663131895a",
+  "dataset_root": "data/processed/cc-source-candidates-20260928-v5",
+  "train_file": "data/processed/cc-source-candidates-20260928-v5/decision-candidates/train.jsonl",
+  "validation_file": "data/processed/cc-source-candidates-20260928-v5/decision-candidates/validation.jsonl",
+  "train_file_sha256": "b2827d06416fc256811bd6b3b662ff143d0f52604891856620153b2a1ec3e83f",
+  "source_manifest_sha256": "51db4812e9291a184d87818622ed8a5fc68542e75b9798cb36face961794c8f5",
+  "split_audit_sha256": "d5343eb277b9c485b9ed92881fc5a4d24728dce0983655a446ac4eedd8630916",
+  "venv": "/home/remoteuser/Desktop/AegisLM/experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv",
+  "hf_hub_cache": "/home/remoteuser/Desktop/AegisLM/outputs/unsloth-original-max-new-tokens-131072-20261004-v1/native-hub",
+  "training": {
+    "recipe": "selected original AST; dataset loader and max_steps only",
+    "max_seq_length": 1024,
+    "max_steps": 100,
+    "dataset_conversion": "copy assistant JSON, add empty thinking field; preserve other content"
+  },
+  "generation": {
+    "budgets": [
+      128,
+      512,
+      2048,
+      65536,
+      "context-minus-input"
+    ],
+    "runtime_context": 131072,
+    "models": [
+      "base",
+      "adapter"
+    ],
+    "sample_ids": [
+      "cc-55fa921bc64a64071c4dd1c9",
+      "cc-b8bec7f8c250c406ad4ed545"
+    ],
+    "reasoning_effort": "medium",
+    "mode": "official-native-defaults",
+    "explicit_eos": false,
+    "external_time_limit": null,
+    "final_prefill": false
+  },
+  "test_used": false,
+  "label_status": "source labels and CWE unreviewed; authorized exploratory training",
+  "status": "prepared",
+  "created_at": "2026-10-04T10:54:05.429599+00:00",
+  "comparison_reference": "cc-official-tutorial-v5-token-caps-20261004-v1"
+}

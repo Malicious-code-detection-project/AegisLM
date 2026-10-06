@@ -1,0 +1,55 @@
+{
+  "recipe": "unsloth_fresh_v1",
+  "protocol": {
+    "reasoning_effort": "low",
+    "padding_side": "left",
+    "pad_token_id": 200017,
+    "eos_token_ids": [200002, 199999],
+    "do_sample": false
+  },
+  "model": {
+    "base_model_id": "openai/gpt-oss-20b",
+    "runtime_model_id": "unsloth/gpt-oss-20b-unsloth-bnb-4bit",
+    "revision": "093fba6992ef5a7152481afec0bdfca1ac486998",
+    "cache_dir": "models/cache"
+  },
+  "dataset": {
+    "train_path": "data/processed/phase-f-source-v5-r1/train.jsonl",
+    "train_sha256": "0c7bf1802c014eb6a5fec4de23e855308ac8558d387e0a28e482c4ae45e428ff",
+    "validation_path": "data/processed/phase-f-source-v5-r1/validation.jsonl",
+    "validation_sha256": "52c92aeb8e0c6c896bbad4256d6cb42a1cec42f22d8a7d87062a6f367549b6fe",
+    "challenge_path": "data/processed/phase-f-source-v5-r1/challenge.jsonl",
+    "challenge_sha256": "d88b4109186acd6f1fb775190057adce5fa220f047ae23e1e4f9b944affc89b5"
+  },
+  "training": {
+    "output_dir": "adapters/source-v2-unsloth-fresh-v1",
+    "checkpoint_dir": "checkpoints/source-v2-unsloth-fresh-v1",
+    "max_seq_length": 2048,
+    "batch_size": 2,
+    "eval_batch_size": 2,
+    "gradient_accumulation_steps": 4,
+    "epochs": 1,
+    "learning_rate": 0.00005,
+    "warmup_ratio": 0.03,
+    "lr_scheduler_type": "cosine",
+    "optimizer": "adamw_8bit",
+    "weight_decay": 0.01,
+    "lora_r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.05,
+    "attention_target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"],
+    "expert_target_layers": [7, 15, 23],
+    "eval_steps": 25,
+    "save_steps": 25,
+    "save_total_limit": 6,
+    "seed": 3407
+  },
+  "canary": {
+    "train_size": 1000,
+    "validation_size": 40,
+    "minimum_schema_pass_rate": 0.9,
+    "generation_batch_size": 1,
+    "max_new_tokens": 512,
+    "train_selection_strategy": "assessment_round_robin_v1"
+  }
+}

@@ -70,8 +70,8 @@ class _Batch(dict):
 
 class _Tokenizer:
     padding_side = "left"
-    pad_token_id = 200017
-    eos_token_id = 200002
+    pad_token_id: int | None = 200017
+    eos_token_id: int | None = 200002
 
     def __init__(self, valid_json):
         self.valid_json = valid_json
@@ -80,9 +80,20 @@ class _Tokenizer:
     def apply_chat_template(self, conversation, **kwargs):
         assert len(conversation) == 2
         self.reasoning_efforts.append(kwargs["reasoning_effort"])
-        return _Batch(input_ids=torch.tensor([[9, 9], [9, 9]]))
+        return _Batch(
+            input_ids=torch.tensor([[200017, 9], [8, 9]]),
+            attention_mask=torch.tensor([[0, 1], [1, 1]]),
+        )
 
     def decode(self, token_ids, *, skip_special_tokens):
+        if token_ids == [200017, 9]:
+            assert skip_special_tokens is False
+            return "[PAD] prompt-a"
+
+        if token_ids == [8, 9]:
+            assert skip_special_tokens is False
+            return "prompt-b"
+
         if token_ids == [1, 200002]:
             if skip_special_tokens:
                 return self.valid_json
@@ -104,8 +115,8 @@ class _Model:
         self.kwargs = kwargs
         return torch.tensor(
             [
-                [9, 9, 1, 200002, 200017, 200017],
-                [9, 9, 2, 3, 4, 5],
+                [200017, 9, 1, 200002, 200017, 200017],
+                [8, 9, 2, 3, 4, 5],
             ]
         )
 
@@ -165,11 +176,42 @@ def test_gate_uses_explicit_protocol_and_reports_finish_reasons(tmp_path):
     assert summary.finish_reasons == {"eos": 1, "length": 1}
     assert summary.harmony_prefix_count == 1
     assert tokenizer.reasoning_efforts == ["low"]
+    assert model.kwargs is not None
     assert model.kwargs["pad_token_id"] == 200017
     assert model.kwargs["eos_token_id"] == [200002, 199999]
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     assert rows[0]["generation"]["generated_token_count"] == 2
     assert rows[1]["generation"]["finish_reason"] == "length"
+    assert [row["id"] for row in rows] == ["record-a", "record-b"]
+
+    assert rows[0]["extracted_final"] == valid_json
+    assert rows[0]["parsed_output"] == json.loads(valid_json)
+
+    assert rows[1]["extracted_final"] == "not-json"
+    assert rows[1]["parsed_output"] is None
+    assert any(
+        error.startswith("invalid JSON:") for error in rows[1]["validation_errors"]
+    )
+
+    expected_inputs = [
+        ([200017, 9], [0, 1], "[PAD] prompt-a"),
+        ([8, 9], [1, 1], "prompt-b"),
+    ]
+
+    for idx, (token_ids, mask, decoded) in enumerate(expected_inputs):
+        saved_input = rows[idx]["input"]
+
+        assert saved_input["messages"] == list(records[idx].prompt_messages)
+        assert saved_input["target_cwe"] == records[idx].target_cwe
+        assert saved_input["input_ids"] == token_ids
+        assert saved_input["attention_mask"] == mask
+        assert saved_input["decoded_input"] == decoded
+
+        assert saved_input["input_ids"] == model.kwargs["input_ids"][idx].tolist()
+        assert (
+            saved_input["attention_mask"]
+            == model.kwargs["attention_mask"][idx].tolist()
+        )
 
     with pytest.raises(FileExistsError):
         run_source_schema_gate(
