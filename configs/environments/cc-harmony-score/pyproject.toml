@@ -1,0 +1,21 @@
+[project]
+name = "aegislm-cc-harmony-score"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "annotated-types==0.8.0",
+    "iniconfig==2.3.0",
+    "openai-harmony==0.0.8",
+    "packaging==26.3",
+    "pluggy==1.6.0",
+    "pydantic==2.13.5",
+    "pydantic-core==2.46.5",
+    "pygments==2.21.0",
+    "pytest==8.4.2",
+    "typing-inspection==0.4.4",
+    "typing-extensions==4.16.0",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]

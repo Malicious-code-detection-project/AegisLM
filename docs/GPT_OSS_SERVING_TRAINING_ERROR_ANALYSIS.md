@@ -981,3 +981,63 @@ snapshot과 AST 기준 일치한다. v2 `runner-source.py`/`isolation-audit.json
 65536/130000에서 기존 prefill OOM이 예상되므로 전체 1200호출 성공을
 가정하지 않는다. 생성 상한을 줄이거나 sampling/EOS를 변경한다면 별도의
 실험 조건으로 기록해야 한다. 과거 결과와 새로운 조건의 출력은 합산하지 않는다.
+
+### 11.15 2026-10-06: v2 GPU 실측 — 조건별 초기화 후에도 OOM 재현
+
+이후 승인된 v2 평가를 실행했고 17:47:06 KST에 전체 순회가 중단됐다.
+adapter/128·512·2048은 각 100건, 65536은 2건 완료로 총 302/1200건이다.
+65536의 세 번째 입력에서 FP32 softmax 13.05GiB 할당이 실패했다.
+실패 입력은 v1과 같은 `cc-8745b2417b18ebf598e0a8c4`이며, 여유 13.01GiB,
+프로세스 사용 34.26GiB가 기록됐다. base와 나머지 두 상한은 미실행이다.
+
+실행된 4조건은 모두 새 worker에서 모델을 로드했고, 로드 전 PyTorch
+allocated/reserved는 0이었다. 각 worker 종료 후 다음 worker가 시작했다.
+따라서 이전 조건의 모델 프로세스를 유지한 것이 이번 실패의 필수 조건은 아니다.
+조건 내부 100건의 요청별 누적은 이번 실험으로 별도 검증한 것이 아니며,
+11.10의 단일 요청 새 프로세스 재현과 함께 해석해야 한다.
+
+2048조건은 TP19/FN21/FP11/TN33/invalid16, 원천 라벨 일치 52/100건이다.
+strict/semantic 집계는 동일하고, 부분 완료된 65536조건의 2건은 모두 양성이다.
+새 학습·test500 평가·메모리 최적화는 하지 않았다. 부분 출력까지 채점했으며
+W&B 로컬 기록은 302건 업로드 후 generation-failed로 종료됐다.
+정확한 환경·명령·PID/시각·결과표는
+[v2 GPU 실행 결과](FINETUNING_EXPERIMENT_PLAN.md#2026-10-06-v2-gpu-실행-결과--초기화-확인-3021200-후-oom)에 기록한다.
+
+### 11.16 2026-10-06: 실패 입력 원천 대조와 CWE 품질 확인
+
+실패 ID `cc-8745b2417b18ebf598e0a8c4`의 canonical validation, 동결 prompt,
+BigVul `training_set.csv`의 0-based row 83874를 대조했다. krb5의
+`spnego_gss_acquire_cred_impersonate_name` 함수이며 코드 1,580자·53줄,
+전체 입력 825token이다. 원천의 마지막 개행 제거 외에 코드가 동일하고
+source SHA-256은 `80f7740bde336ed5d3efa1ab632dcb05831e80e48753acfb3738ae4ebaeb0710`다.
+줄바꿈 52개·tab 107개가 실제 문자로 존재하며 NUL·비ASCII·Harmony 제어 문자열은 없다.
+attention mask는 전부1이다. 원천 언어는 C, canonical은 C++로 기록돼 있어
+언어 판정은 별도 검수 대상이다. 데이터 원본과 실험 설정은 변경하지 않았다.
+
+BigVul 라벨은 `vul=0`, 수정 전후 함수가 동일하며 add/del lines도0이다.
+모델에는 `target_cwe=CWE-18`, 정답에는 `not_observed`가 연결된다.
+그러나 [MITRE CWE-18](https://cwe.mitre.org/data/definitions/18.html)은 폐기된
+Source Code category이고 실제 취약점 매핑이 금지돼 있다. 이것을 구체적인
+약점의 유무를 묻는 검수 완료 gold로 사용할 근거는 부족하다.
+연결된 [krb5 수정 커밋](https://github.com/krb5/krb5/commit/b51b33f2bc5d1497ddf5bd107f791c101695000d)은
+SPNEGO context aliasing 문제를 설명한다. CVE 메타데이터의 존재만으로 이 개별
+함수를 취약하다고 재라벨링하지 않았다. CWE-18은 canonical train에0건,
+validation에7건(present5/not_observed2), 선택된 validation100에는 이1건이다.
+test500 내용은 이번 조사에서 읽지 않았다.
+
+v2의 동일 입력은128에서128token 예산 소진,512에서368token/native EOS와
+유효한 `not_observed` JSON,2048에서356token/native EOS 후 Harmony final
+header 오류를 보였다. 모델은 CWE-18을 각각 초기화·자원 고갈·정보 유출로
+다르게 설명했다. 라벨 일치와 CWE 의미 이해를 같은 성과로 볼 수 없다.
+
+입력 길이와 실제 static-cache/eager 경로를 결합하면65,536상한에서
+첫 두 입력487/572token의 FP32 softmax 배열은7.6659/9.0155GiB,
+실패825token은13.0529GiB다. 계산은 `1*64*N*(N+65536)*4/2**30`이며
+기존 단일 입력 probe의 sink 포함 shape `[1,64,825,66361]`과 일치한다.
+전체 사용량이 아닌 단일 임시 배열 크기다. 이는 코드 내용이 실행돼 생기는
+메모리 문제가 아니라, 입력 길이와 생성 상한이 추론 배열 크기에 미치는 영향이다.
+이번 조사는 CPU 파일 분석이며 새 GPU 실험은 하지 않았다.
+
+추출 코드·prompt·원천 비교·길이별 메모리 계산과 생성 원문은 Git 제외 경로
+`outputs/cc-failed-input-audit-20261006-v1/`의 `source.c`, `prompt.json`,
+`audit.json`, `generated-{128,512,2048}.txt`에 보존했다.

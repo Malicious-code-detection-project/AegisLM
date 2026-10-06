@@ -21,6 +21,7 @@
 | [PHASE_E_TEAM_ONBOARDING.html](PHASE_E_TEAM_ONBOARDING.html) | Phase E 이슈 처리와 팀 교육 주제를 한 장으로 정리한 온보딩 인포그래픽 |
 | [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md) | 파인튜닝 학습 로드맵, 실험 전략, 데이터셋 계획, [v5 판단 학습 실행·Unsloth 복구 기록](FINETUNING_EXPERIMENT_PLAN.md#2026-10-02-v5-decision-only-execution), [공식 GPT-OSS 예제 확보 기록](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-unsloth-official-gpt-oss-20b-reference), [기존 코드와 공식 마스킹 비교](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-final-only-mask-vs-empty-analysis-code-review) |
 | [GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md) | vLLM 서빙과 판단 SFT의 이론·조건 차이, 공식100step 원문 오류 분류, 확인된 사실과 가설·후속 대조 계획 |
+| [B200_REPRODUCTION_RECIPE.md](B200_REPRODUCTION_RECIPE.md) | 동결 v5 이관, 독립 uv TOML·lock, B200 100step 재학습과 조건별 모델 재로딩 평가 실행 절차 |
 | [PR_DESCRIPTION_TEMPLATE.md](PR_DESCRIPTION_TEMPLATE.md) | PR 본문 작성 템플릿과 체크리스트 |
 | [QUALITY_GATES.md](QUALITY_GATES.md) | 코드 변경 PR의 pytest, ruff, mypy 검사 기준 |
 | [TEST_CRITERIA.md](TEST_CRITERIA.md) | Phase C 테스트 기준, JSON schema 검증 기준, 평가 레퍼런스 |
