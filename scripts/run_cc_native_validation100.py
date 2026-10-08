@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -20,11 +22,93 @@ import subprocess
 import sys
 import time
 import traceback
-from typing import Any, cast
+from typing import Any, Iterator, cast
 
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = REPO / "configs/cc_native_step100_validation100_fresh_process_v2.json"
 ISOLATION_PROTOCOL = "fresh-process-per-model-budget-v2"
+COMPARISON_HASHES = (
+    "validation_sha256",
+    "train_sha256",
+    "selection_sha256",
+    "frozen_input_sha256",
+    "prompts_sha256",
+    "gold_sha256",
+    "adapter_sha256",
+)
+
+
+def cache_policy(config: dict[str, Any]) -> str:
+    """Keep historical native generation as the default; reject unknown policies."""
+    policy = config.get("cache_policy", "native")
+    if policy not in ("native", "dynamic"):
+        raise ValueError("Unsupported cache policy")
+    if config.get("extra_generate_kwargs", {}):
+        raise ValueError("Extra generation overrides are not supported")
+    return str(policy)
+
+
+def cache_generate_kwargs(model: Any, policy: str) -> dict[str, Any]:
+    """Pass a copied config so Unsloth cannot override the explicit dynamic kwarg."""
+    if policy == "native":
+        return {}
+    if policy != "dynamic":
+        raise ValueError("Unsupported cache policy")
+    return {
+        "generation_config": deepcopy(model.generation_config),
+        "cache_implementation": "dynamic",
+    }
+
+
+@contextmanager
+def observe_dynamic_cache(model: Any, policy: str) -> Iterator[dict[str, Any]]:
+    """Fail before attention computation if the requested dynamic cache is absent."""
+    observation: dict[str, Any] = {}
+    if policy == "native":
+        yield observation
+        return
+    if policy != "dynamic":
+        raise ValueError("Unsupported cache policy")
+    attention = next(
+        (
+            module
+            for name, module in model.named_modules()
+            if name.endswith(".self_attn")
+        ),
+        None,
+    )
+    if attention is None:
+        raise ValueError("Cannot observe the GPT-OSS attention cache")
+
+    def observe(module: Any, positional: Any, kwargs: dict[str, Any]) -> None:
+        cache = kwargs.get("past_key_values", kwargs.get("past_key_value"))
+        name = type(cache).__name__
+        if name != "DynamicCache":
+            raise ValueError(f"Expected DynamicCache at attention, received {name}")
+        observation["cache_class"] = name
+
+    handle = attention.register_forward_pre_hook(observe, with_kwargs=True)
+    try:
+        yield observation
+        if not observation:
+            raise ValueError("Dynamic cache was not observed during generation")
+    finally:
+        handle.remove()
+
+
+def verify_comparison(config: dict[str, Any], audit: dict[str, Any], old: Path) -> None:
+    """Bind dynamic experiments to the original frozen native cohort and runner."""
+    if cache_policy(config) != "dynamic":
+        return
+    reference = REPO / config["comparison_reference"]
+    reference_config = read(reference / "config.json")
+    if cache_policy(reference_config) != "native":
+        raise ValueError("Comparison reference must be native")
+    original = verify_preparation(reference_config, reference, old)
+    if any(audit[key] != original[key] for key in COMPARISON_HASHES):
+        raise ValueError("Dynamic experiment differs from frozen native cohort")
+    if audit["runner_sha256"] != digest(Path(__file__)):
+        raise ValueError("Prepared dynamic runner changed; prepare a new experiment")
 
 
 def now() -> str:
@@ -95,6 +179,7 @@ def verify_preparation(config: dict[str, Any], root: Path, old: Path) -> dict[st
     ):
         if digest(path) != audit[key]:
             raise ValueError(f"Frozen artifact changed: {path.name}")
+    verify_comparison(config, audit, old)
     return cast(dict[str, Any], audit)
 
 
@@ -103,6 +188,7 @@ def prepare(config: dict[str, Any], root: Path, old: Path) -> None:
 
     if (root / "prepared.json").exists():
         raise ValueError("Preparation is frozen; use run to resume")
+    cache_policy(config)
     source = read(old / "config.json")
     validation_path = REPO / source["validation_file"]
     train_path = REPO / source["train_file"]
@@ -142,29 +228,30 @@ def prepare(config: dict[str, Any], root: Path, old: Path) -> None:
     write(root / "prompts.json", prompts)
     write(root / "gold.json", gold)
     write(root / "frozen-inputs.json", frozen)
-    write(
-        root / "prepared.json",
-        {
-            "prepared_at": now(),
-            "selection_policy": selection["policy"],
-            "samples_per_condition": len(prompts),
-            "gold_counts": {"present": 50, "not_observed": 50},
-            "validation_sha256": digest(validation_path),
-            "train_sha256": digest(train_path),
-            "selection_sha256": digest(selection_path),
-            "frozen_input_sha256": digest(root / "frozen-inputs.json"),
-            "prompts_sha256": digest(root / "prompts.json"),
-            "gold_sha256": digest(root / "gold.json"),
-            "adapter_sha256": digest(old / "gpt_oss_lora/adapter_model.safetensors"),
-            "planned_calls": 100 * len(config["budgets"]) * len(config["models"]),
-            "input_tokens_min": min(len(v["input_ids"]) for v in frozen.values()),
-            "input_tokens_max": max(len(v["input_ids"]) for v in frozen.values()),
-            "train_id_overlap": 0,
-            "train_user_content_overlap": 0,
-            "gold_in_generation_input": False,
-            "test_used": False,
-        },
-    )
+    audit = {
+        "prepared_at": now(),
+        "selection_policy": selection["policy"],
+        "samples_per_condition": len(prompts),
+        "gold_counts": {"present": 50, "not_observed": 50},
+        "validation_sha256": digest(validation_path),
+        "train_sha256": digest(train_path),
+        "selection_sha256": digest(selection_path),
+        "frozen_input_sha256": digest(root / "frozen-inputs.json"),
+        "prompts_sha256": digest(root / "prompts.json"),
+        "gold_sha256": digest(root / "gold.json"),
+        "adapter_sha256": digest(old / "gpt_oss_lora/adapter_model.safetensors"),
+        "planned_calls": 100 * len(config["budgets"]) * len(config["models"]),
+        "input_tokens_min": min(len(v["input_ids"]) for v in frozen.values()),
+        "input_tokens_max": max(len(v["input_ids"]) for v in frozen.values()),
+        "train_id_overlap": 0,
+        "train_user_content_overlap": 0,
+        "gold_in_generation_input": False,
+        "test_used": False,
+    }
+    if cache_policy(config) == "dynamic":
+        audit["runner_sha256"] = digest(Path(__file__))
+    verify_comparison(config, audit, old)
+    write(root / "prepared.json", audit)
 
 
 def run_condition(
@@ -219,6 +306,7 @@ def _generate_condition(
     from transformers import TextStreamer
 
     audit = verify_preparation(config, root, old)
+    policy = cache_policy(config)
     adapter = old / "gpt_oss_lora/adapter_model.safetensors"
     frozen = read(root / "frozen-inputs.json")
     run_id = now()
@@ -252,8 +340,11 @@ def _generate_condition(
             "model_identifier": identifier,
             "model_config": model.config.to_dict(),
             "generation_config": model.generation_config.to_dict(),
+            "cache_policy": policy,
             "external_timeout": None,
-            "extra_generate_kwargs": {},
+            "extra_generate_kwargs": {"cache_implementation": "dynamic"}
+            if policy == "dynamic"
+            else {},
             "rng_policy": "native defaults, no seed reset; each condition starts fresh native RNG",
             "optimizer_steps": 0,
             "backward_calls": 0,
@@ -283,9 +374,14 @@ def _generate_condition(
             key: torch.tensor([value], device="cuda") for key, value in values.items()
         }
         start = time.monotonic()
-        tokens = model.generate(
-            **inputs, max_new_tokens=maximum, streamer=TextStreamer(tokenizer)
-        )
+        torch.cuda.reset_peak_memory_stats()
+        with observe_dynamic_cache(model, policy) as observation:
+            tokens = model.generate(
+                **inputs,
+                max_new_tokens=maximum,
+                streamer=TextStreamer(tokenizer),
+                **cache_generate_kwargs(model, policy),
+            )
         full = tokens[0].tolist()
         assert full[:count] == values["input_ids"]
         generated = full[count:]
@@ -308,6 +404,10 @@ def _generate_condition(
                 "run_id": run_id,
                 "worker_pid": os.getpid(),
                 "execution_protocol": ISOLATION_PROTOCOL,
+                "cache_policy": policy,
+                "cache_observation": observation,
+                "generation_peak_allocated_bytes": torch.cuda.max_memory_allocated(),
+                "generation_peak_reserved_bytes": torch.cuda.max_memory_reserved(),
                 "input_tokens": count,
                 "applied_max_new_tokens": maximum,
                 "generated_tokens": len(generated),
@@ -500,6 +600,8 @@ def run(config: dict[str, Any], root: Path, old: Path, config_path: Path) -> Non
 
 
 def score(config: dict[str, Any], root: Path, old: Path) -> None:
+    if cache_policy(config) == "dynamic":
+        verify_preparation(config, root, old)
     from openai_harmony import (  # type: ignore[import-not-found]
         HarmonyEncodingName,
         load_harmony_encoding,
@@ -524,6 +626,12 @@ def score(config: dict[str, Any], root: Path, old: Path) -> None:
                 if not path.exists():
                     continue
                 row = read(path)
+                if cache_policy(config) == "dynamic" and (
+                    row.get("cache_policy") != "dynamic"
+                    or row.get("cache_observation", {}).get("cache_class")
+                    != "DynamicCache"
+                ):
+                    raise ValueError("Cannot score unverified dynamic cache output")
                 result = module.score_tokens(encoding, row["generated_ids"], expected)
                 i = 0 if expected["assessment"] == "present" else 1
                 parsed = result.get("parsed")
@@ -562,6 +670,7 @@ def score(config: dict[str, Any], root: Path, old: Path) -> None:
             )
     report = {
         "scored_at": now(),
+        "cache_policy": cache_policy(config),
         "execution_protocol": config.get(
             "execution_protocol", "shared-process-across-budgets-v1"
         ),
@@ -579,6 +688,7 @@ def score(config: dict[str, Any], root: Path, old: Path) -> None:
         "Each condition uses the same 50 positive and 50 negative validation inputs. Pending is not invalid.",
         "",
         f"Execution protocol: `{report['execution_protocol']}`.",
+        f"Cache policy: `{report['cache_policy']}`.",
         "",
         "| Model | Generation cap | Completed / 100 | TP | FN | FP | TN | Uncertain | Invalid | Pending |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
@@ -609,7 +719,7 @@ def score(config: dict[str, Any], root: Path, old: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["prepare", "run", "score"])
+    parser.add_argument("action", choices=["prepare", "verify", "run", "score"])
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     args = parser.parse_args()
     config_path = args.config.resolve()
@@ -619,6 +729,19 @@ def main() -> None:
             "Legacy results are read-only; use the fresh-process v2 config"
         )
     root, old = REPO / config["output_dir"], REPO / config["training_reference"]
+    cache_policy(config)
+    if args.action == "verify":
+        audit = verify_preparation(config, root, old)
+        print(
+            json.dumps(
+                {
+                    "status": "verified",
+                    "planned_calls": audit["planned_calls"],
+                    "cache_policy": cache_policy(config),
+                }
+            )
+        )
+        return
     root.mkdir(parents=True, exist_ok=True)
     (root / "raw").mkdir(exist_ok=True)
     if args.action == "score":

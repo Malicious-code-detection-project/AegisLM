@@ -1041,3 +1041,179 @@ header 오류를 보였다. 모델은 CWE-18을 각각 초기화·자원 고갈�
 추출 코드·prompt·원천 비교·길이별 메모리 계산과 생성 원문은 Git 제외 경로
 `outputs/cc-failed-input-audit-20261006-v1/`의 `source.c`, `prompt.json`,
 `audit.json`, `generated-{128,512,2048}.txt`에 보존했다.
+
+### 11.17 2026-10-06: base 대조에서도 동일 prefill OOM
+
+base-only `cc-native-base-validation100-fresh-process-20261006-v1`은
+128/512/2048에서 각각100건을 완료한 뒤,65536의 세 번째 입력
+`cc-8745b2417b18ebf598e0a8c4`에서 중단됐다. 완료302/600건,
+130000과context-minus-input은 미실행이다. 마지막 채점은2026-10-06
+20:49:26 KST이며 strict/semantic 행렬은 같았다.
+
+새 worker PID807555는 조건 시작 전 allocated/reserved0에서 모델을 로딩했다.
+오류는 adapter와 같은 `inplace_eager_attention_forward`의 FP32 softmax이며
+13.05GiB 추가 요청에12.98GiB만 남아 있었다. 따라서 adapter의 유무나 이전
+생성 상한 조건의 누적이 실패의 필수 원인이라는 설명은 지지되지 않는다.
+두 경로가 공유하는 static-cache/eager prefill의 순간 할당이 직접 관측된 병목이다.
+종료 후GPU는115MiB,사용률0%로 반환됐다.
+
+### 11.18 2026-10-07: A6000 메모리 절감 후보 진단 — 완료
+
+사용자가 A6000에서 대안을 분석·검증하도록 요청했다. 기존native100건 결과와
+B200 동일조건 재현 레시피는 보존하고, 추론 조건을 바꾸는 실험을 별도로 수행한다.
+학습·라벨·토큰 입력·생성 상한·양자화·패키지를 변경하지 않는다.
+
+**질문:** 입력825token의65536상한 OOM을 prefill 분할만으로 피할 수 있는가?
+980token 입력과130000상한에서도 같은 방법이 적용되는가?
+
+설치된 Transformers4.56.2 `generation/utils.py::_prefill_chunking`은 마지막
+입력token을 제외한 prefix를 지정 길이로 나누어 같은 cache에 채운다.
+`prefill_chunk_size=128`이면825token 전체에 대한 attention 임시배열을 동시에
+만드는 대신 최대128 query token씩 처리한다. 단일FP32배열의 계산상 크기는
+65536상한에서13.053→2.025GiB,130000상한에서25.733→3.992GiB로 줄어든다.
+이는 전체GPU사용량이나 실측 결과가 아니라 설치 코드의 tensor shape 기반 추정이다.
+
+첫 단계는 다음5조건을 각각 새 모델 프로세스에서 실행한다.
+
+| 조건 | 입력 | 생성 상한 | 변경 |
+| --- | ---: | ---: | --- |
+| base native 참조 | 825 | 2048 | 없음 |
+| base chunked | 825 | 65536 | prefill_chunk_size=128 |
+| base chunked | 825 | 130000 | prefill_chunk_size=128 |
+| base longest chunked | 980 | 130000 | prefill_chunk_size=128 |
+| adapter chunked | 825 | 65536 | prefill_chunk_size=128 |
+
+**이 단계는 품질평가가 아니다.** 큰 생성 상한으로 실제cache를 준비하되 진단용
+stopping criterion으로 새2token 뒤 종료한다. 첫 생성까지의 prefill과 다음decode가
+동작하는지 확인하며, EOS까지 완주하거나13만token을 생성했다는 의미가 아니다.
+첫-token logits는 표준 `output_logits=True`로 두token에 한해 보존한다.
+base 참조와 같은 입력의 base 후보에서 finite 여부·수치 차이·argmax를 대조한다.
+adapter의 logits를 base와 같아야 한다고 요구하지 않는다.
+
+GPU 실행은 기존 Luna tester 한 명이 소유한다. root는 진단 코드와 해석,
+CPU W&B sidecar를 담당한다. 조건 사이에는 종료를 기다린 뒤 새 프로세스를 띄운다.
+첫 오류에서 해당단계를 중지하고 새 원인을 검토한다. 설치 변경·자동재시도·외부timeout은
+없다. 단일 입력의 native EOS까지 생성하는 후속검증은 메모리·수치 결과를 검토한 뒤
+별도 조건명으로 수행한다.
+
+대체후보는 dynamic cache다. 현재Unsloth wrapper는 단순
+`cache_implementation='dynamic'`만 전달하면static으로 덮어쓴다. 설치코드에서는
+복사한`generation_config`와 명시적cache kwarg를 함께 전달할 때 kwarg가 최종
+config merge에서 우선한다. 이 경로 역시 실제cache class와mask·출력 수치를
+확인하기 전에는 해결책으로 확정하지 않는다. cache offload·attention kernel 교체는
+추가후보로 남기며,이번후보와 동시에 적용하지 않는다.
+
+실험 자료: `outputs/cc-a6000-memory-mitigation-20261007-v1/`.
+`plan.json`은 질문·범위·입력/스크립트해시, `probe.py`는 독립진단,
+조건별`result.json`·`traceback.txt`·`first-token-logits.pt`는 원관측이다.
+원native interpreter는
+`experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python`이다.
+예: `probe.py --name base-chunk128-65536 --model base --budget 65536 --mode chunk128`.
+
+W&B는 기존`aegislm/source-v2`에서 독립 run을 만들고
+`memory-diagnostic`, `not-quality-evaluation` 태그를 사용한다.
+Run: [cc-a6000-memory-mitigation-20261007-v1](https://wandb.ai/erad3254-looking-for-a-job/aegislm/runs/source-v2-evaluation-5ecdadd1fbe61150).
+`track.py --wandb`는 이미 저장된조건도 읽고 이후변화를 추적하는 CPU sidecar다.
+조건별상태·모델·상한·chunk/cache·실제생성량·peak allocated/reserved GiB·시간·오류종류를
+전송하며 prompt·생성원문·token ID·logit tensor·traceback은 로컬에만 남긴다.
+링크와연결상태는`wandb-link.json`, `wandb-progress.json`,
+완료영수증은`diagnostic.wandb.json`이다. 진단용2token 결과를 기존100건
+confusion matrix나모델성능으로 합치지 않는다.
+
+첫 참조조건 `base-native-2048`은 새2token 진단을 정상 종료했다.
+실제wrapper kwarg와attention 관측은static cache를 확인했고 첫logits는 모두finite였다.
+진단중 peak allocated는13.228964GiB다. 다른후보의성공이나전체생성성공을
+이참조조건으로 대신 주장하지 않는다.
+
+**단계A 중단:** `base-chunk128-65536`은 첫토큰 전에 shape mismatch로 실패했다.
+traceback의실제구현은 `cache_utils.py::SlidingWindowLayer.update`다.
+첫128token으로128칸 sliding cache가채워진뒤 두번째128token이들어오면,
+이버전의 `is_full` 분기는단일decode token을가정하고 마지막1칸에128개를대입해
+`[8,128,64]` 대 `[1,8,1,64]` 오류를낸다. OOM은아니며 peak allocated19.295GiB다.
+계획의나머지3조건은실행하지않았다. 단순히chunk크기를바꾸면고쳐진다고가정하지않고
+기존패키지를패치하지않았다.
+
+**단계B 인계:** 사용자가자리를비우기전실행을root에게인계하도록요청했다.
+Luna는종료했고root가단일GPU실행을소유한다. 시스템권한승인을대신할수는없으며,
+이번고정진단스크립트에한정한실행규칙으로필요권한을요청했다.
+실행범위는 `handoff-and-stage-b.json`에추가기록한다.
+
+동적cache 후보는 설치변경없이 다음인자를사용한다.
+
+```python
+generation_config=copy.deepcopy(model.generation_config),
+cache_implementation="dynamic",
+```
+
+`base-dynamic-65536`은같은825token 입력에서2token 진단을통과했다.
+wrapper의최종kwarg와attention hook에서모두DynamicCache를확인했고,
+peak allocated12.878375GiB였다.980token 최장입력의130000상한도2token을통과했다.
+이수치는reset_peak_memory_stats 이후의생성구간peak이며모델로딩구간peak와구분한다.
+
+base native/2048과dynamic/65536의첫logits는finite하고argmax가같았으나
+텐서전체가같지는않았다(max abs0.71875,mean abs0.09317,cosine0.999608).
+첫token분포의KL은약3.01e-12이나이token은Harmony header 위치이므로
+본문생성의동등성·정확도보장의근거로사용하지않는다.
+생성방식이바뀐별도조건으로기록하고,같은모델adapter참조와후속EOS완주를확인한다.
+
+**단계B 결과:** adapter도 native/2048 참조와 dynamic/65536의 2token 진단을
+완료했다. 첫 logits는 finite하고 argmax가 같지만, max abs0.7265625,
+mean abs0.08581, cosine0.999699로 완전히 같지는 않다. base와 마찬가지로
+Harmony header 위치의 비교이며 본문 출력의 동등성을 보장하지 않는다.
+
+실제 수행한 초기 진단6조건을 함께 기록한다. 아래 표의 성공은 새2token까지의
+진단 성공이며 전체 답변 완주나100건 평가의 성공이 아니다.
+
+| 모델 | 입력 token | 생성 상한 | cache·prefill | 실제 생성 token | 결과 | 생성 구간 peak allocated |
+| --- | ---: | ---: | --- | ---: | --- | ---: |
+| base | 825 | 2048 | native StaticCache | 2 | 진단 종료 | 13.229GiB |
+| base | 825 | 65536 | StaticCache·chunk128 | 0 | sliding cache shape 오류 | 19.295GiB |
+| base | 825 | 65536 | DynamicCache | 2 | 진단 종료 | 12.878GiB |
+| base | 980 | 130000 | DynamicCache | 2 | 진단 종료 | 13.104GiB |
+| adapter | 825 | 2048 | native StaticCache | 2 | 진단 종료 | 13.573GiB |
+| adapter | 825 | 65536 | DynamicCache | 2 | 진단 종료 | 13.223GiB |
+
+chunk128은 첫 생성 전에 실패했으며 원 result의 generated_tokens 필드는 없다.
+표의0은 traceback과 실행 위치로 확인한 첫 생성 전 실패를 뜻한다.
+
+이후 진단용 2token 제한을 제거하고 다음 세 조건을 각각 새 프로세스에서
+native EOS까지 실행했다. 생성 상한은 그대로 유지했고 세 조건 모두
+실제 attention에서 DynamicCache가 관측됐다.
+
+| 모델·입력 | 생성 상한 | 실제 생성 token | 종료 | 생성 구간 peak allocated | assessment |
+| --- | ---: | ---: | --- | ---: | --- |
+| base·기존 실패 입력825token | 65536 | 515 | native EOS | 12.878GiB | uncertain |
+| adapter·기존 실패 입력825token | 65536 | 553 | native EOS | 13.223GiB | not_observed |
+| base·최장 입력980token | 130000 | 1024 | native EOS | 13.104GiB | uncertain |
+
+표의 peak는 모델 로딩 뒤 `reset_peak_memory_stats`로 측정한 생성 구간의
+PyTorch allocated 메모리이며, 전체 프로세스의 최대 사용량이나 GPU 전체
+사용량과는 다르다. 세 출력 모두 Harmony final, JSON, schema 검증을 통과했다.
+원천 정답 `not_observed`와의 일치는 adapter 한 건뿐이다. 특히 기존 실패
+입력의 CWE-18 라벨 문제는 11.16절처럼 남아 있으므로 이 결과를 모델 품질
+향상이나 검수된 보안 판단으로 해석하지 않는다.
+
+총9조건 중8조건 완료·1조건 실패(chunk128)이며, 단계A의 미실행3조건은
+이9조건에 포함하지 않는다. 모든 조건은 서로 다른 PID에서 실행했고 모델
+로딩 전 PyTorch allocated/reserved가 모두0이었다. adapter 파일은 변경하지
+않았다. W&B sidecar는9조건 기록 후 정상 종료했으며 `wandb-progress.json`은
+`completed`, `diagnostic.wandb.json` 영수증은 `complete`다. 종료 후 A6000은
+115MiB·사용률0%로 반환됐다.
+
+재현 입력은 기존 base-only 동결 `frozen-inputs.json`
+(SHA-256 `abe9c5992f5764a6c270e80e83e29febf28b267daaffc89a3af8c5c040163135`),
+진단 스크립트 `probe.py`의 SHA-256은
+`c6115d582d6838a65f43c7b844b32b0e8669ca6a3b98f21acc9b1f8eacb86a53`다.
+환경은 기존 native Python3.12.13, torch2.14.1+cu130, Transformers4.56.2,
+Unsloth2026.9.14, Unsloth Zoo2026.9.9이며 GPU는 NVIDIA RTX A6000이다.
+완주 명령의 예는 위 interpreter로 실행하는
+`probe.py --name base-dynamic-65536-full --model base --budget 65536 --mode dynamic --full`이다.
+후속 조건·명령은 `full-validation-plan.json`, 출력 검증은
+`full-output-scores.json`, 전체 요약은 `final-summary.json`에 보존했다.
+
+**결론과 범위:** 동적 cache로 기존 실패 입력의 첫 생성 전 OOM을 피하고
+base·adapter 모두 EOS까지 반환하는 대안을 A6000에서 확인했다. 최장 입력의
+130000상한도 정상 반환했지만 실제 생성은1024token이므로 13만token 생성의
+메모리 적합성을 검증한 것은 아니다. validation100 전체도 아직 실행하지
+않았다. 후속 비교는 동적 cache를 명시한 별도 조건으로 수행해야 하며,
+기존 static-cache 평가나 B200 동일조건 재현 결과와 합산하지 않는다.
