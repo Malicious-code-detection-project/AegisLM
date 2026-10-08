@@ -90,6 +90,14 @@ def safe_config(config: dict[str, Any], audit: dict[str, Any]) -> dict[str, Any]
     # Preserve the historical v1 identity; new runs explicitly bind isolation policy.
     if "execution_protocol" in config:
         result["execution_protocol"] = config["execution_protocol"]
+    if "cache_policy" in config:
+        policy = config["cache_policy"]
+        if policy not in ("native", "dynamic"):
+            raise ValueError("Unsupported cache policy")
+        result["cache_policy"] = policy
+        if policy == "dynamic":
+            result["generation_mode"] = "native-sampling-dynamic-cache"
+            result["runner_sha256"] = audit["runner_sha256"]
     validate_wandb_payload(result)
     return result
 
