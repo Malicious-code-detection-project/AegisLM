@@ -1,5 +1,12 @@
 # AegisLM
 
+2026-10-07 최신 기록은 [A6000 실험표](docs/A6000_EXPERIMENT_TABLES.md)와
+[B200 실험표](docs/B200_EXPERIMENT_TABLES.md)로 환경별로 구분합니다.
+B200 두 GPU DDP의 100-step 학습·adapter 저장 검증을 완료했고,
+동일 validation100의 base·adapter 생성 평가는 준비 완료·0/1,200회입니다.
+A6000의 완료된 2건 진단, 100건 평가 OOM, 후속 base 착수 기록을 구분하며
+환경 차이가 있는 학습 loss·시간을 탐지 성능 개선이나 GPU만의 효과로 해석하지 않습니다.
+
 2026-09-28 C/C++ 원천 데이터 재구성 결과는
 `data/processed/cc-source-candidates-20260928-v5`에 보관합니다. 여섯 원천의
 1,012,598개 후보를 공통 형식으로 정리하고, 그중 판단 라벨이 있는
@@ -15,7 +22,7 @@ C/C++ raw-source reconstruction 절을 참고합니다.
 Unsloth 100-step 본 학습을 완료했습니다. 평균 학습 loss는 0.209771,
 마지막 step loss는 0.028211이며 W&B에서 100개 step 기록과 종료 상태를
 확인했습니다. 최종 adapter는 새 프로세스에서 저장값과 일치했습니다.
-현재 실행 경로는 `cc-decision-20261002-v7`입니다. base는 128-token 예산에서
+2026-10-03 해당 실행 경로는 `cc-decision-20261002-v7`입니다. base는 128-token 예산에서
 100건 모두 final JSON을 생성하지 못했습니다. test500 품질 비교는 아직
 실행하지 않았으며, 이전 batch2 수치 비교 실패도 진단 이력으로 남아 있습니다.
 2026-10-03에는 `max-new-tokens-65536` 생성 한도 비교 실험도 완료했습니다.
@@ -83,7 +90,7 @@ adapter의128/512/2048조건 각100건과65536조건2건을 완료한 뒤,
 별도로 보존했으며, base와 나머지 상한은 미실행입니다. 초기화 요구는 실행된
 4조건에서 확인했지만 메모리 부족은 해결되지 않았습니다.
 [조건별 초기화 감사](docs/GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#1113-2026-10-06-생성-상한-변경-시-모델-재로딩-여부-감사와-수정)에 근거와 제한을 기록합니다.
-현재 명령과 결과는
+해당 v5 실행의 명령과 결과는
 [v5 판단 학습 실행 안내](docs/FINETUNING_EXPERIMENT_PLAN.md#2026-10-02-v5-decision-only-execution)에 기록합니다.
 기존 83개 데이터셋 폴더의 목적·결과·계보와 보존 조건은
 [폴더 이력 및 정리 기록](docs/DATASET_ARTIFACT_INVENTORY.md)에 정리했습니다.
@@ -109,12 +116,13 @@ LLM 모델 개발은 분석 파이프라인 구현과 다른 속도로 움직입
 
 ## 현재 초점
 
-현재 저장소 단계는 **Phase E: source-v2 tiny SFT PoC**입니다.
+현재 저장소 단계는 **Phase E: SFT 학습·adapter 재현과 평가 검증**입니다.
 
-Phase E에서 tiny Unsloth QLoRA 학습과 adapter 저장/로드 가능성을 확인했습니다.
-현재는 data/processed/phase-f-source-v5-r1의 C/C++ 함수 단위 데이터로
-openai/gpt-oss-20b base와 source-v2 QLoRA adapter를 동일 조건에서 비교하는
-재현 가능한 학습·평가 경로를 구축합니다.
+현재 공식 native 기준선은 동결된
+`data/processed/cc-source-candidates-20260928-v5`와 GPT-OSS-20B를 사용합니다.
+A6000의 30/100-step 이력과 B200 두 GPU의 100-step 결과는 환경별로 기록하며,
+B200 생성 평가는 입력·scorer 준비 완료 상태입니다. 학습·저장 완료와 평가 품질 통과를 구분합니다.
+아래 초기 source-v2 canary 기록은 해당 실행 당시의 이력으로 보존합니다.
 
 2026-09-10 기준 1,000-record Unsloth QLoRA canary는 학습, expert adapter
 저장, 재로딩까지 성공했지만 held-out JSON/schema/grounding gate가 0/40으로
@@ -226,6 +234,25 @@ Project NuriLab 저장소 수정, 런타임 연결, 통합 검증은 Project Nur
 - 실제 악성 샘플 저장 또는 실행
 - secrets, private CTI, private customer data 저장
 
+## B200 가상환경
+
+B200 Linux의 프로젝트 루트에서 필요한 환경 하나를 활성화한다.
+
+학습·응답 생성용:
+
+```bash
+source configs/environments/cc-native-step100/.venv/bin/activate
+```
+
+CPU 채점용:
+
+```bash
+source configs/environments/cc-harmony-score/.venv/bin/activate
+```
+
+활성화 해제는 `deactivate`, Python 버전 확인은 `python --version`이다.
+설치·환경 전환·실행 방식은 [독립 실험 환경 README](configs/environments/README.md#가상환경-활성화와-전환)를 따른다.
+
 ## 문서
 
 선택형 개인 하네스는 [v4 진입점](references/이정민/index.md)에서 확인합니다.
@@ -242,6 +269,8 @@ Project NuriLab 저장소 수정, 런타임 연결, 통합 검증은 Project Nur
 - `docs/PHASE_E_TEAM_ONBOARDING.html` - Phase E 이슈 처리와 팀 교육 주제 인포그래픽
 - `docs/FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획
 - [B200 재현 레시피](docs/B200_REPRODUCTION_RECIPE.md) - 동결 데이터 이관, 100-step 재학습, base·adapter의 동일 100건 평가
+- [A6000 실험표](docs/A6000_EXPERIMENT_TABLES.md) - 원 native 30/100-step, 2건 진단과 100건 평가의 보존 결과
+- [B200 실험표](docs/B200_EXPERIMENT_TABLES.md) - 두 GPU DDP 구성, 실패·완료 이력, rank별 학습 수치와 평가 준비 상태
 - `docs/PR_DESCRIPTION_TEMPLATE.md` - PR 본문 작성 템플릿
 - `docs/QUALITY_GATES.md` - 코드 변경 PR 검사 기준
 - `docs/TEST_CRITERIA.md` - Phase C 테스트 기준과 평가 레퍼런스

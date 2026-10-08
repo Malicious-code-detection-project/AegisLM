@@ -7,6 +7,8 @@
 동결 processed 자료와 감사 메타데이터는 Git 제외 정책에 따라 별도로 복사한다.
 raw 전처리는 다시 수행하지 않는다.
 
+2026-10-07 현재 B200는 두 GPU DDP로 100-step을 완료했다. 단일 GPU 원 명령은 과거 참조이며 현재 실행·후보 프레임워크 비교·관측 결과는 13–15절을 따른다.
+
 ## 1. 가져올 코드와 데이터
 
 코드와 실행 보조 파일은 저장소의 `scripts/b200/`, 환경 선언은
@@ -125,6 +127,30 @@ openai-harmony 0.0.8. Unsloth commit은
 실패 로그를 보존하고 해당 B200 환경의 호환성 문제로 분리한다.
 lock 생성·기존 환경과의 일치는 확인했지만 B200 신규 설치·GPU 실행은 별도 검증 단계다.
 
+
+### 외부 관리 B200에서 Python 3.12.3 사용
+
+2026-10-07 사용자는 외부 관리 서버의 기존 Python 3.12.3을 유지하기로 결정했다.
+이번 실행은 원 A6000의 Python 3.12.13과 패치 버전이 다른 재현 조건으로 기록한다.
+프로젝트 검사 도구의 기본값은 3.12.13이며, 이 서버에서는 정확한 3.12.3을 명시한다.
+
+이미 설치한 native/scorer 환경에서 다음 검사를 실행한다.
+
+```bash
+configs/environments/cc-native-step100/.venv/bin/python scripts/b200/manage.py check-env native --expected-python 3.12.3
+configs/environments/cc-harmony-score/.venv/bin/python scripts/b200/manage.py check-env score --expected-python 3.12.3
+```
+
+두 환경을 새로 설치해야 하는 경우에는 기존 환경별 uv sync --locked 명령의
+--python에 3.12.3을 지정한다. 서버 Python이나 uv 자체의 업그레이드는 이 변형의
+선행 조건이 아니다. 패키지 버전과 Git 리비전 대조는 그대로 수행한다.
+
+outputs/b200-{native,score}-environment.json에는 실제 python_version,
+원 실행의 reference_python, 선택한 expected_python,
+python_matches_reference=false, python_patch_difference_accepted=true가 남는다.
+이 기록은 Python 패치 차이를 명시한 패키지 대조 결과이며, 실제 GPU·모델 실행의
+호환성이나 원 실험과 같은 학습·생성 결과를 검증한 것은 아니다.
+
 ## 4. 모델 준비와 동결 데이터 검사
 
 모델용으로 비어 있는 전용 HF cache를 사용한다. 기존 B200 cache가 있더라도
@@ -181,7 +207,7 @@ supervised-token 감사 결과**를 A6000 자료와 대조한다.
 이관한 `manifest.json`과 `split-audit.json`은 기존 전체 split 감사 기록이며,
 test 본문을 새로 읽어 감사를 재실행하는 단계는 아니다.
 
-## 5. B200에서 새 100-step 학습
+## 5. 단일 GPU 원 레시피 (과거 참조; 현재 B200 두 장 실행은 13절)
 
 아래 preflight는 짧은 BF16 행렬 연산으로 선택한 GPU를 확인하고 종료한다.
 이후 학습은 별도 프로세스다. 다른 GPU 작업과 겹치지 않는지 먼저 확인한다.
@@ -335,3 +361,161 @@ B200 신규 설치·100step 학습·1,200회 생성의 성공은 아직 검증�
 Git 전달 전 검사: pytest 577개, Ruff lint·format, mypy 통과.
 복제 경로에 맞춘 초기화, 기존 실행 보존, 데이터 변조 거부, 데이터 전용 export,
 미완료 학습 거부를 CPU 회귀 테스트로 확인한다.
+
+
+## 2026-10-07 B200 실행 준비 결과
+
+외부 관리 서버의 Python 3.12.3을 유지한 조건에서 실행 준비를 완료했다. native 113개·scorer 11개 패키지 버전과 Git 리비전 대조를 통과했다.
+
+사용자의 기존 별칭 방식에 맞춰 data → Data, model → Model, artifact → TrainingArtifacts로 연결했다. 실제 개인 저장 루트와 백업 위치는 Git 제외 outputs/b200-preparation-v1/storage-layout.json에 기록했다. outputs를 외부 저장소에 연결하면서도 보존 스크립트가 계산하는 실행 루트의 data 경로가 같은 데이터로 해석되도록 구성했다.
+
+고정 Unsloth 4bit 모델 revision과 4개 weight shard의 digest를 검증했다. 원 학습 10,000건의 토큰·마스킹 감사와 제외 조건이 일치했고, 유효 8,525건(완전 target 8,510·부분 target 15)을 확인했다. 동일 validation 100건과 6개 데이터 해시도 일치했다. CPU 관련 테스트 43개, B200 BF16 연산, 원 튜토리얼의 모델·LoRA 로딩 및 짧은 forward를 통과했다.
+
+이 결과는 준비와 사전 검사에 한정된다. 100-step 본 학습 및 base/adapter 각 600회 생성은 아직 수행하지 않았고, 장문맥·대규모 생성의 성공이나 분류 품질을 주장하지 않는다. 실행 환경과 실제 명령은 Git 제외 outputs/b200-preparation-v1/README.md에 남겼다.
+
+
+## 2026-10-07 동결 데이터 품질 재점검
+
+현재 링크가 가리키는 train 10,000건·validation 1,000건을 직접 읽었다. 13개 동결 파일 해시와 JSON 계약이 일치했고, ID·동일 user 입력·동일 코드·공백 정규화 코드의 학습/검증 간 중복은 0건이다. 기존 학습 산출물을 덮어쓰지 않은 별도 계산에서 10,000건의 토큰·마스킹 감사가 원 기록과 일치했으며, 평가 100건의 6개 해시도 다시 일치했다. test500 본문은 읽지 않았다. CVE·commit·함수 그룹과 near-clone 결과는 보존된 원 split-audit 근거이며 raw 전체를 이번에 재감사한 것은 아니다.
+
+학습 원본은 present/not_observed 각 5,000건이지만, 마스킹 후 유효 집합은 3,831/4,694건(44.94%/55.06%)이다. 1,475건 제외, 완전 target 8,510건과 부분 target 15건을 확인했다. uncertain target은 0건이다.
+
+MITRE 공식 CWE 4.20(2026-04-30) XML을 대조한 결과 Category CWE 대상이 학습 1,733건·검증 146건, 유효 학습 1,522건·평가 100건 중 10건에 있다. Deprecated CWE 대상은 학습 29건·검증 12건이며 평가 100건 중 1건이다. Category와 Deprecated 수치는 중복될 수 있으므로 합산하지 않는다. CWE-399·264·189 같은 Category는 개별 약점이 아니며 공식 취약점 매핑이 PROHIBITED인 대상이다. 원천 라벨·CWE 의미 검수는 미완료이며 manifest의 approved_for_training은 false다. 기존 config의 탐색적 재현 설정을 품질 검수 완료로 해석하지 않는다.
+
+동결 데이터와 원 설정은 변경하지 않았다. 현재 결과는 동일 원본 재현의 입력 검증과 데이터 품질 지적을 구분한다. 개별 CWE·정답 근거를 검수하고 부분 target·uncertain 표본 정책을 정할 작업은 별도 데이터 버전에서 진행한다. 원시 검사 결과·공식 카탈로그 checksum은 Git 제외 outputs/b200-data-recheck-20261007T040927Z에 보존했다.
+
+공식 기준: https://cwe.mitre.org/data/downloads.html 및 https://cwe.mitre.org/data/definitions/399.html.
+
+## 13. 2026-10-07 결정: B200 두 장으로 같은 100-step 학습
+
+공용 `outputs/b200-runtime-env.sh`의 `CUDA_VISIBLE_DEVICES=0`은 보존된 단일 장치
+preflight·native 생성 경로의 기본값이다. `run-ddp.sh`는 source 직후
+`CUDA_VISIBLE_DEVICES=0,1`로 재지정하고 `--nproc-per-node=2`로 학습한다.
+`run-ddp-eval.sh`는 평가 장치를 `0`으로 명시한다. 환경 파일 자체는 학습 실행 명령이 아니다.
+
+사용자는 별도 단일 GPU 100-step 실험을 건너뛰고 B200 GPU 0·1을 함께 쓰기로 했다.
+원 A6000 기록(`FINETUNING_EXPERIMENT_PLAN.md`, `official-tutorial-v5-max-steps-100`)은
+100-step, 전체 배치 4, 학습 시간 656.811초이며 외부 시간 제한을 추가하지 않았다.
+이번에도 optimizer step 100회로 학습량을 제한한다. 계획 표본 제시 수는 400회이며,
+입력 토큰의 상한은 400 × 1024 = 409,600이다. 준비·컴파일 시간은 학습 시간과 구분한다.
+원 실행 시간은 B200 시간 보장이 아니다.
+
+| 조건 | A6000 원 실행 | B200 이번 실행 |
+| --- | --- | --- |
+| GPU·분산 | A6000 1장 | B200 2장, NCCL DDP |
+| GPU당 batch / accumulation | 1 / 4 | 1 / 2 |
+| 전체 batch / optimizer steps | 4 / 100 | 4 / 100 |
+| 데이터·마스크 | 유효 8,525건, assistant final만 | 동일 파일·10,000건 감사 결과 대조 |
+| LoRA | r8/alpha16, trainable 92,454,912개 | 동일 대상·개수 검사 |
+| 나머지 학습 설정 | seed3407, 길이1024, LR2e-4, warmup5, linear, adamw_8bit | 유지 |
+| Python | 3.12.13 | 외부 관리 서버의 3.12.3 |
+| 추가 DDP 설정 | 해당 없음 | rank별 device_map, find_unused_parameters=true, rank0 저장 |
+| activation checkpointing | Unsloth reentrant 재계산 | MoE DDP 호환을 위해 해제 |
+
+DDP는 GPU마다 모델 복제본을 두고 데이터를 나누어 gradient를 동기화한다.
+두 장의 VRAM을 하나의 모델 공간으로 합치는 구성은 아니다.
+DDP sampler·reduction과 GPU 커널·Python 패치가 다르므로 동일 adapter SHA나 같은 loss를 요구하지 않는다.
+activation checkpointing도 달라졌으므로 속도 차이를 GPU 하드웨어 효과 하나로 해석하지 않는다.
+기존 단일 GPU 준비 산출물은 보존하고 새 실행은 별도 이름을 사용한다.
+
+```bash
+# 이미 설치·다운로드·데이터 검사를 완료한 현재 B200에서만 실행한다.
+python3 scripts/b200/train_ddp.py init --run b200-ddp2-step100-v3
+nohup bash scripts/b200/run-ddp.sh b200-ddp2-step100-v3 \
+  > outputs/b200-ddp2-step100-v3/launcher.log 2>&1 < /dev/null &
+echo $! > outputs/b200-ddp2-step100-v3/launcher.pid
+
+configs/environments/cc-native-step100/.venv/bin/python \
+  scripts/b200/train_ddp.py check --run b200-ddp2-step100-v3
+```
+
+`train_ddp.py`는 원 튜토리얼의 선택 AST를 사용하고 허용한 변경을 역변환해서 대조한다.
+각 rank의 `gpu-preflight.json`, `ready.json`, `progress.json`, `runtime.json`, `training.json`을 남긴다.
+두 GPU NCCL 합산, 장치 배치, 입력·마스크, 초기·최종 LoRA hash 일치를 검사한다.
+rank 0만 최종 adapter와 공용 결과를 저장하며, 저장 safetensors와 학습 직후 가중치도 대조한다.
+첫 오류·비유한 loss·설정 불일치에서 중단하며 torchrun 자동 재시도는 끈다.
+동일 실행 이름을 다시 학습하거나 실패 결과를 덮어쓰지 않는다.
+실제 완료 여부는 `b200-verification.json`과 두 rank의 기록으로 판단한다.
+
+v1은 torchrun 인자 파싱 단계에서 중단되어 GPU 학습을 시작하지 않았다.
+설치된 torchrun에는 `--` 구분자를 넣어 학습 스크립트 인자를 넘기는 것을 실제 파서로 확인했다.
+v2는 1 optimizer step 뒤 sparse MoE expert의 unused gradient 때문에 DDP reduction 오류로 중단됐다.
+두 실패 기록과 v2 실행 소스는 보존했다.
+설치된 Zoo commit의 checkpoint shim은 `use_reentrant=True`를 강제한다.
+그래서 v3에서는 expert를 제외하거나 loss를 수정하지 않고 activation checkpointing을 해제하고
+DDP의 unused-parameter 감지를 켰다. 모델 양자화·LoRA 대상·dropout·optimizer·학습량은 유지한다.
+이는 activation 저장·재계산 전략의 차이이며 원 실행과 완전히 같은 실행 설정이라고 보고하지 않는다.
+[PyTorch 2.14 DDP의 checkpointing 제한](https://docs.pytorch.org/docs/2.14/generated/torch.nn.parallel.DistributedDataParallel.html).
+
+별도 base/adapter 평가 config는 새 DDP adapter를 가리킨다.
+평가 준비에는 기존 native prepare·Harmony scorer를 쓰며, `check_ddp_eval.py`로 여섯 데이터 해시,
+50/50 구성·입력 길이·600회 계획과 새 adapter SHA를 검사한다.
+이 새 경로에는 원 scorer의 `common.py`·`score.py`도 같은 바이트로 보존한다.
+실제 생성은 준비 확인을 끝낸 `run-ddp-eval.sh`에서 기존 native generator를 사용한다.
+학습에 쓰인 소스는 실행 당시 SHA와 `executed-source/` 복사본으로 보존한다.
+후속 init/default 경로 보완을 그 실행에 사용됐다고 소급 기록하지 않는다.
+현재 v3는 이미 실행됐으므로 같은 이름을 다시 초기화하거나 학습하지 않는다.
+실제 생성 1,200회는 아직 실행하지 않았다.
+
+```bash
+# 이미 준비된 평가를 실행할 때의 명령 기록. 현재 단계에서는 생성하지 않았다.
+bash scripts/b200/run-ddp-eval.sh base b200-ddp2-step100-v3
+# base 종료·결과 확인 후 다음 arm을 실행한다.
+bash scripts/b200/run-ddp-eval.sh adapter b200-ddp2-step100-v3
+```
+
+## 14. LLaMA-Factory·Axolotl 후보 비교 — 문서 준비만
+
+2026-10-07 공식 문서를 확인했다. 두 프레임워크를 설치하거나 기존 환경·학습기를 변경하지 않았다.
+문서에 제시된 지원과 현재 B200에서 직접 검증한 호환성을 구분한다.
+
+| 비교 | LLaMA-Factory | Axolotl |
+| --- | --- | --- |
+| GPT-OSS 근거 | 공식 GPT-OSS LoRA 가이드, `gpt` template | 공식 GPT-OSS 20B LoRA·FFT 가이드, Harmony masking 설명 |
+| 분산 경로 | DDP, DeepSpeed, FSDP/FSDP2 | 기본 DDP, DeepSpeed ZeRO1–3, FSDP2 |
+| 두 장의 첫 후보 | DDP LoRA | DDP LoRA |
+| 대규모 모델 후보 | ZeRO/FSDP2 설정을 별도 비교 | FSDP2 설정을 별도 비교 |
+| 환경 차이 | GPT-OSS 가이드에는 Transformers4.55.0 설치 예가 있음 | 가이드에는 PyTorch2.9.1 이상·Axolotl0.16.1 이상이 제시됨 |
+| 이번 Unsloth NF4·MoE LoRA와 동일성 | 같은 model revision·양자화·대상 파라미터 지원은 미검증 | 문서의 linear-layer LoRA 예가 전체 expert target과 같은지는 미검증 |
+| 현 B200 실행·속도 | 미실행·미측정 | 미실행·미측정 |
+
+LLaMA-Factory의 공식 GPT-OSS 가이드는 `openai/gpt-oss-20b`를 예로 들고 다중 GPU를 지원한다고 명시한다.
+분산 가이드는 `FORCE_TORCHRUN=1`과 GPU 선택을 통해 DDP를 시작하는 방법을 제공한다.
+현재 Unsloth용 NF4 snapshot을 그대로 사용해 같은 expert LoRA를 학습할 수 있다는 증거는 아직 없다.
+[GPT-OSS 가이드](https://llamafactory.readthedocs.io/en/latest/advanced/best_practice/gpt-oss.html),
+[분산 학습 가이드](https://llamafactory.readthedocs.io/en/latest/advanced/distributed.html).
+
+Axolotl의 GPT-OSS 가이드는 linear-layer LoRA 예와 FSDP2 전체 학습 예를 제공한다.
+Harmony의 중간 turn `thinking`과 chat-template masking 충돌도 명시한다.
+현재 자료는 단일 assistant final과 빈 thinking이지만, framework 기본 masking이 기존 label 배열과
+같다는 뜻은 아니므로 실제 input_ids·labels 대조가 필요하다.
+분산 문서의 현재 FSDP 지원은 FSDP2이며 DDP·DeepSpeed·FSDP를 임의로 동시에 켜지 않는다.
+[GPT-OSS 가이드](https://docs.axolotl.ai/docs/models/gpt-oss.html),
+[다중 GPU 가이드](https://docs.axolotl.ai/docs/multi-gpu.html).
+
+향후 전환 후보를 실행할 때에는 별도 환경·고정 framework commit/lock·새 실험 이름을 사용한다.
+실행 전에는 같은 동결 cohort, 날짜2026-10-04, 길이1024의 input_ids·labels와 제외1,475건,
+trainable 파라미터 이름·개수, NF4/double-quant/BF16 compute를 대조한다.
+전체 batch4/100-step·optimizer·scheduler·seed도 맞춘다.
+MXFP4 원 모델 또는 BF16으로 바꾸거나 LoRA expert 대상을 줄이면 변경 변수가 늘어나므로
+Unsloth 원 재현과 분리하여 비교한다. 평가 데이터·scorer·native 생성 조건은 같은 기준을 사용한다.
+마스킹·tokenizer·optimizer·모델 양자화 중 동등성이 확보되지 않으면 성능 차이를
+프레임워크 효과 하나로 해석하지 않는다.
+
+현재 판단은 **기존 환경으로 두 GPU 재현을 먼저 확인하고, 프레임워크 전환은 별도 결정**이다.
+설정 파일을 만들기 전에 각 후보의 동일성 검사 결과를 근거로 선택한다.
+[Unsloth DDP 공식 가이드](https://unsloth.ai/docs/basics/multi-gpu-training-with-unsloth/ddp).
+
+## 15. 환경별 실험표와 최신 결과 위치
+
+실제 B200 실행 결과·환경·실패 이력·rank별 학습 수치·생성 평가 준비 표는
+[B200 실험표](B200_EXPERIMENT_TABLES.md)에 기록한다.
+기존15절의 학습 수치를 그 표로 옮기고 실제 artifacts와 다시 대조했다.
+A6000의 원 native 30/100-step과2건/100건 평가 이력은
+[A6000 실험표](A6000_EXPERIMENT_TABLES.md)에 별도로 정리한다.
+
+2026-10-07 확인 상태는 B200 두 GPU100-step 학습·adapter 저장 검증 완료,
+base·adapter 평가 준비 완료·실제 생성0/1,200회다.
+이 레시피는 실행 절차와 프레임워크 후보 문서를 담당한다.
+원 실행 artifacts는 보존하며, 현재 training config의 초기 prepared 상태나 상속된2건 진단 계획을
+현재 평가 진행 상태로 읽지 않는다. 구체적인 기준 파일은 B200 표6절을 따른다.

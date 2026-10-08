@@ -22,11 +22,18 @@
 | [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md) | 파인튜닝 학습 로드맵, 실험 전략, 데이터셋 계획, [v5 판단 학습 실행·Unsloth 복구 기록](FINETUNING_EXPERIMENT_PLAN.md#2026-10-02-v5-decision-only-execution), [공식 GPT-OSS 예제 확보 기록](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-unsloth-official-gpt-oss-20b-reference), [기존 코드와 공식 마스킹 비교](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-final-only-mask-vs-empty-analysis-code-review) |
 | [GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md) | vLLM 서빙과 판단 SFT의 이론·조건 차이, 공식100step 원문 오류 분류, 확인된 사실과 가설·후속 대조 계획 |
 | [B200_REPRODUCTION_RECIPE.md](B200_REPRODUCTION_RECIPE.md) | 동결 v5 이관, 독립 uv TOML·lock, B200 100step 재학습과 조건별 모델 재로딩 평가 실행 절차 |
+| [A6000_EXPERIMENT_TABLES.md](A6000_EXPERIMENT_TABLES.md) | A6000 native 환경·30/100-step 학습, 2건 진단·100건 평가의 보존 결과와 확인 한계 |
+| [B200_EXPERIMENT_TABLES.md](B200_EXPERIMENT_TABLES.md) | B200 두 GPU 실행 구성·실패/완료·rank별 학습 결과·base/adapter 평가 준비 표 |
 | [PR_DESCRIPTION_TEMPLATE.md](PR_DESCRIPTION_TEMPLATE.md) | PR 본문 작성 템플릿과 체크리스트 |
 | [QUALITY_GATES.md](QUALITY_GATES.md) | 코드 변경 PR의 pytest, ruff, mypy 검사 기준 |
 | [TEST_CRITERIA.md](TEST_CRITERIA.md) | Phase C 테스트 기준, JSON schema 검증 기준, 평가 레퍼런스 |
 
 ## 문서 관리 규칙
+
+2026-10-07 환경별 조회용 결과표는 [A6000](A6000_EXPERIMENT_TABLES.md)과
+[B200](B200_EXPERIMENT_TABLES.md)로 구분합니다. 원 artifacts와 아래 상세 이력은 보존하며,
+단일 GPU와 DDP, teacher-forced 진단과 자유 생성, 준비와 완료를 합산하지 않습니다.
+아래 2026-10-04 링크들은 A6000에서 수행한 기존 상세 이력입니다.
 
 최근 실험은 [SFTTrainer final-only 학습·native EOS 기록](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-sfttrainer-final-only-mask-eos-return),
 [최대 문맥 생성 비교](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-context-window-max-131072-generation-experiment),
