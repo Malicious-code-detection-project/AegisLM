@@ -437,6 +437,17 @@ rank 0만 최종 adapter와 공용 결과를 저장하며, 저장 safetensors와
 동일 실행 이름을 다시 학습하거나 실패 결과를 덮어쓰지 않는다.
 실제 완료 여부는 `b200-verification.json`과 두 rank의 기록으로 판단한다.
 
+`train_ddp.py init`과 `run-ddp.sh`의 실행 이름 생략 시 기본값은 모두
+`b200-ddp2-step100-v3`다. 이미 실행한 v3를 재사용하지 말고 후속 실험에는
+새 이름을 두 명령에 동일하게 전달한다. 런처는 초기화된 config·rank 디렉터리를
+확인하고, 기존 `launcher-exit.json`, `launcher-attempt.json` 또는 어느 rank의
+`attempt.json`이 있으면 종료 trap 등록과 환경 로딩 전에 거부한다.
+최초 실행은 `launcher-attempt.json`을 배타적으로 생성하여 동시 실행도 막는다.
+torchrun 이전의 환경 확인 실패도 그 실행의 종료 코드로 기록하며,
+`launcher-exit.json`도 배타적으로 생성해 기존 성공·실패 코드를 보존한다.
+실패 기록을 삭제해서 재시작하지 않는다. 이 런처 보완은 과거 B200 학습에
+소급 적용된 것으로 기록하지 않는다.
+
 v1은 torchrun 인자 파싱 단계에서 중단되어 GPU 학습을 시작하지 않았다.
 설치된 torchrun에는 `--` 구분자를 넣어 학습 스크립트 인자를 넘기는 것을 실제 파서로 확인했다.
 v2는 1 optimizer step 뒤 sparse MoE expert의 unused gradient 때문에 DDP reduction 오류로 중단됐다.
