@@ -135,3 +135,111 @@ def test_preserved_tutorial_matches_original_source() -> None:
     assert manage.digest(manage.SCRIPT_REFERENCE / "training/original.py") == (
         "74ff47bb9212f482f7378d86f27bc088973e924ae427cc84891d87663131895a"
     )
+
+
+@pytest.fixture
+def environment_reference(clone: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Provide a matching package while simulating the managed server's Python."""
+    from types import SimpleNamespace
+
+    manage.write(
+        manage.REFERENCE / "native-packages.json",
+        {"fake-dependency": {"version": "1.0.0"}},
+    )
+    distribution = SimpleNamespace(version="1.0.0", read_text=lambda name: "{}")
+    monkeypatch.setattr(
+        manage.importlib.metadata, "distribution", lambda name: distribution
+    )
+    monkeypatch.setattr(manage.platform, "python_version", lambda: "3.12.3")
+    return clone
+
+
+def test_environment_default_rejects_python_patch_difference(
+    environment_reference: Path,
+) -> None:
+    with pytest.raises(
+        RuntimeError, match=r"Expected Python 3\.12\.13; found 3\.12\.3"
+    ):
+        manage.check_env("native")
+    assert not (environment_reference / "outputs/b200-native-environment.json").exists()
+
+
+def test_environment_explicit_python3123_records_reference_difference(
+    environment_reference: Path,
+) -> None:
+    manage.check_env("native", expected_python="3.12.3")
+    report = manage.read(environment_reference / "outputs/b200-native-environment.json")
+    assert report["python_version"] == report["expected_python"] == "3.12.3"
+    assert report["reference_python"] == "3.12.13"
+    assert report["python_matches_reference"] is False
+    assert report["python_patch_difference_accepted"] is True
+    assert report["packages"] == {"fake-dependency": {"version": "1.0.0"}}
+
+
+def test_environment_reference_python_records_matching_version(
+    environment_reference: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(manage.platform, "python_version", lambda: "3.12.13")
+    manage.check_env("native")
+    report = manage.read(environment_reference / "outputs/b200-native-environment.json")
+    assert report["python_version"] == report["expected_python"] == "3.12.13"
+    assert report["python_matches_reference"] is True
+    assert report["python_patch_difference_accepted"] is False
+
+
+def test_environment_override_requires_exact_selected_patch(
+    environment_reference: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(manage.platform, "python_version", lambda: "3.12.4")
+    with pytest.raises(RuntimeError, match=r"Expected Python 3\.12\.3; found 3\.12\.4"):
+        manage.check_env("native", expected_python="3.12.3")
+    assert not (environment_reference / "outputs/b200-native-environment.json").exists()
+
+
+def test_environment_override_still_rejects_package_version_difference(
+    environment_reference: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        manage.importlib.metadata,
+        "distribution",
+        lambda name: SimpleNamespace(version="2.0.0"),
+    )
+    with pytest.raises(RuntimeError, match="Package version differs: fake-dependency"):
+        manage.check_env("native", expected_python="3.12.3")
+    assert not (environment_reference / "outputs/b200-native-environment.json").exists()
+
+
+def test_environment_override_still_rejects_git_revision_difference(
+    environment_reference: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    manage.write(
+        manage.REFERENCE / "native-packages.json",
+        {
+            "fake-dependency": {
+                "version": "1.0.0",
+                "direct_url": {"vcs_info": {"commit_id": "a" * 40}},
+            }
+        },
+    )
+    distribution = SimpleNamespace(
+        version="1.0.0",
+        read_text=lambda name: json.dumps({"vcs_info": {"commit_id": "b" * 40}}),
+    )
+    monkeypatch.setattr(
+        manage.importlib.metadata, "distribution", lambda name: distribution
+    )
+    with pytest.raises(RuntimeError, match="Git revision differs: fake-dependency"):
+        manage.check_env("native", expected_python="3.12.3")
+    assert not (environment_reference / "outputs/b200-native-environment.json").exists()
+
+
+def test_environment_unsupported_expected_python_is_rejected(
+    environment_reference: Path,
+) -> None:
+    with pytest.raises(RuntimeError, match="Supported Python versions"):
+        manage.check_env("native", expected_python="3.12")
+    assert not (environment_reference / "outputs/b200-native-environment.json").exists()

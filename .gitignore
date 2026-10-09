@@ -44,3 +44,21 @@ experiments/*
 /.active-profile
 /.harness-local/
 /.codex/agents/*.toml
+
+# Machine-private files and root storage symlinks must stay out of Git.
+/.private/
+/.local/
+/.secrets/
+.ssh/
+*.pem
+*.key
+*.ppk
+id_rsa
+id_ed25519
+/data
+/model
+/artifact
+/outputs
+/Data
+/Model
+/TrainingArtifacts

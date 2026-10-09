@@ -1,5 +1,9 @@
 # GPT-OSS-20B Fine-Tuning Experiment Plan
 
+2026-10-07 환경별 조회용 표: [A6000 실험표](A6000_EXPERIMENT_TABLES.md),
+[B200 두 GPU 실험표](B200_EXPERIMENT_TABLES.md).
+이 문서의 기존 A6000 상세 이력은 보존하고, B200 실행 구성·수치는 별도 표에서 읽는다.
+
 2026-09-28 data reconstruction: the new provisional C/C++ decision corpus is
 `data/processed/cc-source-candidates-20260928-v5` (10,000/1,000/500).
 Its final overlap and 4,096-token training-format audits pass. The six-source
@@ -352,7 +356,7 @@ uv run scripts/verify_gpu.py
 * **Check Items**:
   * **Dependency Integrity**: Detects whether core packages (PyTorch, CUDA, Unsloth, etc.) have been altered or corrupted by other workloads.
   * **Security Leak Prevention (Git Ignore)**: Prevents large weights, caching directories (`checkpoints/`, `adapters/`, `models/`, `unsloth_compiled_cache/`), and `.env` files from being accidentally staged or committed to Git.
-  * **Experiment Metadata Archiving**: Automatically updates [experiments/env_check_report.json](../experiments/env_check_report.json) upon execution. You should copy the `versions` block from this report into the `environment` metadata of your experiment log to maintain a trace of the workstation's runtime configuration history.
+  * **Experiment Metadata Archiving**: Automatically updates experiments/env_check_report.json — `experiments/env_check_report.json` (장비별로 생성하는 Git 제외 산출물) upon execution. You should copy the `versions` block from this report into the `environment` metadata of your experiment log to maintain a trace of the workstation's runtime configuration history.
 
 
 ### 8.2 SFT Training Configuration Dry-run Check
@@ -877,7 +881,7 @@ train/validation의 정답 schema·근거를 검사한다. challenge는 중복 �
 저장소 루트에서 준비된 환경을 사용한다. 패키지를 자동 업그레이드하지 않는다.
 
 ```bash
-cd /home/remoteuser/Desktop/AegisLM
+cd "<AegisLM 저장소의 로컬 경로>"
 source experiments/training-loop-debug/activate.sh
 python scripts/train_source_unsloth_fresh.py --help
 ```
@@ -4236,3 +4240,18 @@ experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python
 `uv run mypy aegislm/ tests/`, `git diff --check` 통과.
 준비 브랜치는 `experiment/a6000-dynamic-cache`이며 이 기록 시점에는
 커밋·푸시 전이다. 동결 데이터·adapter·generated artifact는 Git에서 제외한다.
+
+### 2026-10-07: 환경별 실험표 정리와 B200 재현 기록 갱신
+
+사용자는 A6000 표를 확인하고 B200를 환경별로 따로 기록하도록 요청했다.
+[A6000 표](A6000_EXPERIMENT_TABLES.md)는 보존 문서·동결 메타데이터를 재검토한 조회용 표다.
+공식30/100-step 학습, validation2건의 완료된 생성 진단, teacher-forced100건 진단,
+자유 생성 v2의302/1200 후 OOM, 후속 base 단독 run의 착수 기록을 구분했다.
+이번 갱신에서 A6000 현장에 접속하거나 후속 base run의 종료를 확인하지 않았다.
+
+[B200 표](B200_EXPERIMENT_TABLES.md)는 실제 rank별 runtime·training·저장 검증과
+두 평가 arm의 prepared/scorer/raw 파일 수에서 작성했다.
+`b200-ddp2-step100-v3`의 두 GPU100step·최종 rank hash 및 saved adapter 일치가 확인됐다.
+전체batch4·동결 데이터·LoRA 대상은 유지했고 Python패치·DDP·accumulation·checkpointing의 차이를 명시했다.
+생성은 base0/600·adapter0/600으로 준비만 완료했다. 이 문서 갱신에서 추가 GPU 작업은 실행하지 않았다.
+새 표를 README·문서 인덱스·AGENTS의 지도에 연결했으며 원 artifacts·실패·기존 결과를 변경하지 않았다.

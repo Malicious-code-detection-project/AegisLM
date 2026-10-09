@@ -167,7 +167,12 @@ def check_data() -> None:
     )
 
 
-def check_env(kind: str) -> None:
+def check_env(kind: str, expected_python: str = "3.12.13") -> None:
+    reference_python = "3.12.13"
+    require(
+        expected_python in ("3.12.13", "3.12.3"),
+        "Supported Python versions: 3.12.13 or explicit 3.12.3",
+    )
     expected = read(REFERENCE / f"{kind}-packages.json")
     actual = {}
     for name, package in expected.items():
@@ -185,10 +190,23 @@ def check_env(kind: str) -> None:
                 f"Git revision differs: {name}",
             )
             actual[name]["direct_url"] = direct
-    require(platform.python_version() == "3.12.13", "Expected Python 3.12.13")
+    actual_python = platform.python_version()
+    require(
+        actual_python == expected_python,
+        f"Expected Python {expected_python}; found {actual_python}",
+    )
     write(
         ROOT / f"outputs/b200-{kind}-environment.json",
-        {"python": sys.version, "executable": sys.executable, "packages": actual},
+        {
+            "python": sys.version,
+            "python_version": actual_python,
+            "reference_python": reference_python,
+            "expected_python": expected_python,
+            "python_matches_reference": actual_python == reference_python,
+            "python_patch_difference_accepted": expected_python != reference_python,
+            "executable": sys.executable,
+            "packages": actual,
+        },
     )
     print(f"Verified {len(expected)} {kind} package versions and Git revisions")
 
@@ -266,10 +284,16 @@ def main() -> None:
         ),
     )
     parser.add_argument("kind", nargs="?")
+    parser.add_argument(
+        "--expected-python",
+        choices=("3.12.13", "3.12.3"),
+        default="3.12.13",
+        help="Exact Python version for check-env; 3.12.3 records a reference deviation",
+    )
     args = parser.parse_args()
     if args.action == "check-env":
         require(args.kind in ("native", "score"), "Choose native or score")
-        check_env(args.kind)
+        check_env(args.kind, args.expected_python)
     elif args.action == "check-eval":
         require(args.kind in ("base", "adapter"), "Choose base or adapter")
         check_eval(args.kind)
