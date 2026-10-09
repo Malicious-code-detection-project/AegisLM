@@ -151,3 +151,36 @@ def test_isolation_policy_is_in_new_wandb_identity_without_changing_legacy_ident
     isolated = safe_config(config, audit)
     assert isolated.pop("execution_protocol") == config["execution_protocol"]
     assert isolated == legacy
+
+
+def test_dynamic_cache_tracking_has_distinct_identity_without_leaking_paths():
+    from scripts.track_cc_native_validation100 import safe_config
+
+    config = {
+        "experiment_id": "cache-comparison",
+        "budgets": [128],
+        "models": ["base"],
+        "runtime_context": 131072,
+    }
+    audit = dict.fromkeys(
+        (
+            "train_sha256",
+            "validation_sha256",
+            "selection_sha256",
+            "frozen_input_sha256",
+            "adapter_sha256",
+            "runner_sha256",
+        ),
+        "0" * 64,
+    )
+    native = safe_config(config, audit)
+    dynamic = safe_config(
+        {**config, "cache_policy": "dynamic", "comparison_reference": "/PRIVATE/PATH"},
+        audit,
+    )
+    assert native["generation_mode"] == "official-native-defaults"
+    assert "cache_policy" not in native
+    assert dynamic["generation_mode"] == "native-sampling-dynamic-cache"
+    assert dynamic["cache_policy"] == "dynamic"
+    assert dynamic["runner_sha256"] == audit["runner_sha256"]
+    assert "PRIVATE" not in json.dumps(dynamic)

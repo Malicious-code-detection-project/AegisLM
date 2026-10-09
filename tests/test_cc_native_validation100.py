@@ -282,3 +282,135 @@ def test_condition_worker_preserves_original_error(tmp_path, monkeypatch):
     error = sweep.read(root / "conditions/adapter-65536-error.json")
     assert error["budget"] == 65536
     assert "original allocation error" in error["traceback"]
+
+
+def test_dynamic_kwarg_survives_unsloth_config_override_without_mutating_model():
+    from types import SimpleNamespace
+
+    model = SimpleNamespace(
+        generation_config=SimpleNamespace(
+            cache_implementation=None,
+            eos_token_id=[2],
+            temperature=0.7,
+        )
+    )
+    original = deepcopy(model.generation_config)
+    kwargs = sweep.cache_generate_kwargs(model, "dynamic")
+    # Reproduce the installed wrapper's config mutation and final HF kwarg merge.
+    kwargs["generation_config"].cache_implementation = "static"
+    effective = {**vars(kwargs.pop("generation_config")), **kwargs}
+    assert effective == {**vars(original), "cache_implementation": "dynamic"}
+    assert model.generation_config == original
+    assert sweep.cache_generate_kwargs(model, "native") == {}
+    assert sweep.cache_policy({}) == "native"
+    with pytest.raises(ValueError, match="Unsupported cache"):
+        sweep.cache_policy({"cache_policy": "typo"})
+    with pytest.raises(ValueError, match="Extra generation"):
+        sweep.cache_policy({"extra_generate_kwargs": {"temperature": 0}})
+
+
+class FakeAttention:
+    def register_forward_pre_hook(self, hook, *, with_kwargs):
+        assert with_kwargs
+        self.hook = hook
+        self.removed = False
+        return self
+
+    def remove(self):
+        self.removed = True
+
+
+@pytest.mark.parametrize("observed", ["DynamicCache", "StaticCache", None])
+def test_dynamic_cache_is_observed_and_hook_is_always_removed(observed):
+    from types import SimpleNamespace
+
+    attention = FakeAttention()
+    model = SimpleNamespace(
+        named_modules=lambda: [("model.layers.0.self_attn", attention)]
+    )
+
+    def generate():
+        with sweep.observe_dynamic_cache(model, "dynamic") as evidence:
+            if observed:
+                attention.hook(
+                    attention, (), {"past_key_values": type(observed, (), {})()}
+                )
+        return evidence
+
+    if observed == "DynamicCache":
+        assert generate() == {"cache_class": "DynamicCache"}
+    else:
+        with pytest.raises(ValueError, match="DynamicCache|not observed"):
+            generate()
+    assert attention.removed
+
+
+def test_cache_hook_cleanup_preserves_generation_exception():
+    from types import SimpleNamespace
+
+    attention = FakeAttention()
+    model = SimpleNamespace(named_modules=lambda: [("model.self_attn", attention)])
+    with pytest.raises(RuntimeError, match="original OOM"):
+        with sweep.observe_dynamic_cache(model, "dynamic"):
+            raise RuntimeError("original OOM")
+    assert attention.removed
+    with sweep.observe_dynamic_cache(object(), "native") as evidence:
+        assert evidence == {}
+
+
+def test_dynamic_comparison_rejects_different_cohort_and_changed_runner(
+    tmp_path, monkeypatch
+):
+    config, reference, old = isolated_fixture(tmp_path)
+    original = sweep.read(reference / "prepared.json")
+    for key in sweep.COMPARISON_HASHES:
+        original.setdefault(key, "0" * 64)
+    sweep.write(reference / "prepared.json", original)
+    dynamic = {
+        **config,
+        "cache_policy": "dynamic",
+        "comparison_reference": str(reference),
+    }
+    audit = {**original, "runner_sha256": sweep.digest(Path(sweep.__file__))}
+    sweep.verify_comparison(dynamic, audit, old)
+    audit["frozen_input_sha256"] = "1" * 64
+    with pytest.raises(ValueError, match="differs from frozen"):
+        sweep.verify_comparison(dynamic, audit, old)
+    audit["frozen_input_sha256"] = original["frozen_input_sha256"]
+    audit["runner_sha256"] = "1" * 64
+    with pytest.raises(ValueError, match="runner changed"):
+        sweep.verify_comparison(dynamic, audit, old)
+
+
+@pytest.mark.parametrize("cache_class", [None, "StaticCache"])
+def test_dynamic_scoring_rejects_outputs_without_cache_evidence(
+    tmp_path, monkeypatch, cache_class
+):
+    from types import SimpleNamespace
+
+    config, root, old = isolated_fixture(tmp_path)
+    config.update(cache_policy="dynamic", models=["base"], budgets=[128])
+    sweep.write(root / "gold.json", {"case": {"assessment": "present"}})
+    sweep.write(
+        root / "raw/base-128-case.json",
+        {
+            "cache_policy": "dynamic",
+            "cache_observation": {"cache_class": cache_class},
+        },
+    )
+    (old / "score.py").write_text(
+        "# Scoring must be rejected before calling the scorer.\n"
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "openai_harmony",
+        SimpleNamespace(
+            HarmonyEncodingName=SimpleNamespace(HARMONY_GPT_OSS="test"),
+            load_harmony_encoding=lambda _: None,
+        ),
+    )
+    monkeypatch.setattr(sweep, "verify_preparation", lambda *args: {})
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    with pytest.raises(ValueError, match="unverified dynamic cache output"):
+        sweep.score(config, root, old)
+    assert not (root / "confusion-matrices.json").exists()

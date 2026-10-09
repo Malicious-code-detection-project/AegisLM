@@ -4049,6 +4049,198 @@ experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python
 W&B tracker에도 위 base 전용 config와 `--wandb`를 명시한다. 결과와 성공 여부는
 실제 실행 산출물로 확인하며, 65,536 이상의 메모리 부족 해결을 가정하지 않는다.
 
+#### 2026-10-07: Unsloth·Axolotl·LLaMA-Factory 비교와 선택 기준
+
+사용자가 공유한 B200 계획 13·14절과 공식 문서를 기준으로 학습 프레임워크의
+역할과 비교 기준을 정리했다. 이번 작업은 문서화이며 프레임워크 설치·전환,
+새 학습·평가 실행을 포함하지 않는다. B200의 실행 상태는 사용자 제공 기록이며
+이 A6000 세션에서 원격 GPU나 실행 산출물을 직접 검증한 결과가 아니다.
+
+Unsloth는 지원 모델의 커널·LoRA 연산·중간값 저장과 재계산을 최적화하므로
+메모리가 제한된 단일 GPU에서 유력한 선택이다. FlashAttention 사용 여부만으로
+전체 학습 속도나 메모리 사용량을 설명할 수 없다. 그러나 단일 GPU에서 항상
+가장 빠르다는 뜻은 아니며, 공식 벤치마크의 개선 배율을 현재 GPT-OSS 설정에
+그대로 적용하지 않는다. 로컬에서 확인한 것은 기존 A6000 100-step 학습의
+완료이며, 세 프레임워크의 동일조건 성능 비교는 아직 없다.
+
+| 비교 | Unsloth | Axolotl | LLaMA-Factory |
+| --- | --- | --- | --- |
+| 중심 강점 | 지원 모델의 속도·메모리 최적화 | 설정 파일 기반 학습·분산 실험 구성 | 다양한 모델·학습법을 공통 작업 흐름으로 제공 |
+| 사용 방식 | Python 코드·튜토리얼, UI도 제공 | YAML·CLI 중심 | WebUI·CLI·설정 파일 |
+| 최적화 접근 | 모델별 커널·패치, LoRA 연산, checkpointing | attention backend·packing·분산 전략 조합 | 여러 학습법과 최적화 backend 통합 |
+| 다중 GPU | DDP 지원, 조합별 검증 필요 | DDP·DeepSpeed·FSDP2 | DDP·DeepSpeed·FSDP 계열 |
+| 현재 비교의 핵심 | 모델별 패치와 MoE·DDP의 상호작용 | 기존 양자화·expert LoRA·마스킹 재현 | 기존 양자화·expert LoRA·마스킹 재현 |
+
+이는 설계와 사용 방식의 비교이며 성능 순위가 아니다. LLaMA-Factory의
+사용량이 가장 많다는 순위도 이 조사로 확정하지 않는다. 또한 LLaMA-Factory는
+Unsloth 통합을 제공하므로 프레임워크 이름뿐 아니라 실제 backend를 기록해야
+한다. 이 통합이 현재 GPT-OSS·NF4·expert LoRA 조합까지 지원하는지는 미검증이다.
+
+근거: [Unsloth 소개](https://unsloth.ai/docs/get-started),
+[checkpointing 최적화](https://unsloth.ai/blog/long-context),
+[Unsloth DDP](https://unsloth.ai/docs/basics/multi-gpu-training-with-unsloth/ddp),
+[Axolotl 다중 GPU](https://docs.axolotl.ai/docs/multi-gpu.html),
+[LLaMA-Factory 저장소](https://github.com/hiyouga/LlamaFactory),
+[LLaMA-Factory 분산 학습](https://llamafactory.readthedocs.io/en/latest/advanced/distributed.html).
+공식 지원 범위 확인일은2026-10-07이며 실제 실행에는 고정 버전의 호환성 검증이 필요하다.
+
+**학습과 생성 평가의 구분:** Axolotl은 학습 프레임워크, FlashAttention은
+학습과 추론에 사용할 수 있는 attention 계산 최적화다. vLLM은 추론·서빙
+엔진이며 PagedAttention은 KV cache를 블록으로 관리하고 읽는 기술이다.
+일반적인 SFT의 역전파 메모리는 추론용 KV cache 설정만으로 해결되지 않는다.
+Paged optimizer도 optimizer 상태를 관리하는 별도 기술이다.
+현재 A6000의 문제는 완료된100-step 학습 이후 생성 평가에서 발생한 OOM이며,
+동적 cache 진단 결과는
+[오류 분석 문서 11.18절](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#1118-2026-10-07-a6000-메모리-절감-후보-진단--완료)에 기록했다.
+이는 학습 프레임워크 전환의 성능 근거로 사용하지 않는다.
+기술 근거: [Axolotl attention](https://docs.axolotl.ai/docs/attention.html),
+[Transformers 캐시](https://huggingface.co/docs/transformers/v4.56.2/en/cache_explanation),
+[PagedAttention](https://vllm.ai/blog/2023-06-20-vllm),
+[QLoRA와 paged optimizer](https://arxiv.org/abs/2305.14314).
+
+**사용자 제공 B200 계획의 해석:** B200 두 장의 DDP에서 GPU당batch1,
+accumulation2로 전체batch4·100 optimizer step을 유지한다는 계획이다.
+v2의 sparse MoE unused-gradient 오류 이후, 설치된 Zoo의 reentrant
+checkpointing과 DDP 조합을 피하려고 v3에서는 activation checkpointing을
+끄고 `find_unused_parameters=true`를 사용한다고 보고됐다.
+[PyTorch DDP 문서](https://docs.pytorch.org/docs/2.14/generated/torch.nn.parallel.DistributedDataParallel.html)의
+reentrant checkpointing 제약과 부합하는 대응이지만, 여기서 v3의 완료를
+확정하지 않는다. 해당 환경의 `b200-verification.json`과 두 rank 기록으로
+판정해야 한다. Unsloth 전체가 다중 GPU에 부적합하다는 증거도 아니다.
+
+checkpointing 해제는 activation 저장량과 재계산량을 바꾼다. 따라서
+A6000 대비 속도 차이를 B200 하드웨어 효과만으로 해석하지 않는다.
+두 GPU DDP는 모델 복제와 gradient 동기화 방식이며 두 장의 VRAM을 하나의
+모델 공간으로 합치지 않는다. 전체batch와step 수가 같아도 sampler·loss
+집계·커널 등의 차이 때문에 같은 loss나 adapter SHA를 요구하지 않는다.
+
+**현재 선택 의견과 후속 비교 조건:** A6000에서는 실행 근거가 있는 Unsloth를
+기준선으로 유지하고, B200의 기존 두 GPU 재현 확인과 프레임워크 전환 결정을
+분리한다. 마스킹·expert LoRA·분산 설정을 코드와 설정 파일로 관리하는 현재
+요구에는 Axolotl을 우선 비교 후보로 본다. 팀의 공통 UI와 여러 모델·학습법
+운영이 우선이면 LLaMA-Factory를 비교한다. 이는 선택 의견이며 전환 승인이나
+성능 우위의 확정이 아니다.
+
+후속 비교에서는 별도 환경·고정 commit/lock·새 실험명을 사용하고 다음을 대조한다.
+
+- 동일 동결 입력의 `input_ids`·`labels`, 날짜·길이·마스킹·제외 기록.
+- 모델 revision, NF4/double-quant/BF16 compute, LoRA 대상 이름·개수.
+- 전체batch4·100-step, optimizer·scheduler·seed와 checkpointing 전략.
+- 동일 평가 입력·scorer·명시된 생성 backend로 측정한 품질.
+- 실제 처리 token 기준 학습tokens/s, 최대VRAM, 준비·컴파일 시간,
+  실패와 디버깅 비용. 입력 token 처리량과 loss 대상 token 수는 구분한다.
+
+지원상 이유로 양자화·expert 대상·마스킹 등을 바꿔야 하면 변경 조건을 명시하고
+프레임워크 효과만으로 해석하지 않는다. 기능의 문서상 지원과 현재 환경의
+실측 호환성은 끝까지 구분한다.
+
+#### 2026-10-08: A6000 동적 캐시 validation100 — 실험 전 준비 완료
+
+사용자가 실험 표를 기록하고 GPU 실험 전 단계까지 준비한 뒤 커밋·푸시할
+변경 묶음을 점검하도록 요청했다. 이번 단계에서 GPU 학습·생성 및 새로운
+온라인 W&B run은 시작하지 않았다. B200의 두 GPU 학습과 별개로 진행한다.
+
+**질문:** 기존 native StaticCache에서65536상한의 세 번째 입력에 발생한
+prefill OOM을 DynamicCache로 피하면서, 같은100건을 각 생성 상한에서
+완료할 수 있는가? 완료율·생성량·종료 이유·JSON/schema 유효성·strict/semantic
+confusion matrix를 함께 관측한다. 길게 생성할수록 좋아진다고 가정하지 않는다.
+
+| 단계 | cache | 모델 | 범위 | 관측·현재 상태 |
+| --- | --- | --- | --- | --- |
+| 기존 v2 평가 | native StaticCache | adapter | 100건 × 6상한 | 302/1200 전체 계획 중 adapter302건 후 OOM; base 미실행 |
+| 기존 base 단독 평가 | native StaticCache | base | 100건 × 6상한 | 302/600 후 같은 입력·softmax OOM |
+| 2026-10-07 초기 진단 | native/chunk128/dynamic | base·adapter | 2token 진단6조건 | 5조건 완료, chunk128 shape 오류1조건 |
+| 2026-10-07 EOS 진단 | dynamic | base·adapter | 단일 입력3조건 | 515·553·1024token 후 EOS; 전체100건·실제13만token은 미검증 |
+| 새 base 평가 | dynamic | base | 100건 × 6상한 | CPU 준비 완료, 생성0/600 |
+| 새 adapter 평가 | dynamic | 기존100-step adapter | 100건 × 6상한 | CPU 준비 완료, 생성0/600; base 결과 검토 뒤 별도 착수 |
+
+초기·EOS 진단의 모든9조건 실측 표와 실패 근거는
+[오류 분석 11.18절](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md#1118-2026-10-07-a6000-메모리-절감-후보-진단--완료)에 있다.
+새 실험은 전체100건의 동일한 양성50·음성50, 미검수 원천 라벨을 사용한다.
+
+| 생성 상한 | base 계획·완료 | adapter 계획·완료 | 현재 단계 |
+| --- | --- | --- | --- |
+| 128 | 100 / 0 | 100 / 0 | 준비 |
+| 512 | 100 / 0 | 100 / 0 | 준비 |
+| 2048 | 100 / 0 | 100 / 0 | 준비 |
+| 65536 | 100 / 0 | 100 / 0 | 준비 |
+| 130000 | 100 / 0 | 100 / 0 | 준비 |
+| context-minus-input | 100 / 0 | 100 / 0 | 준비 |
+
+빈 결과표의0은 아직 관측이 없다는 뜻이며 모든 조건은 pending100이다.
+OOM·미시도는 invalid나FN으로 채점하지 않는다. 첫 오류에서 순회를 멈추고
+부분 생성 결과까지 채점하며, 자동 재시도·부분 조건 이어붙이기는 하지 않는다.
+
+**고정 조건:** RTX A6000 한 장, runtime context131072, 기존 native 환경과
+model revision `093fba6992ef5a7152481afec0bdfca1ac486998`, 4bit 양자화,
+동결 날짜2026-10-04, native sampling/EOS, 외부timeout 없음, 새 학습0step.
+모델×상한마다 새 프로세스에서 모델을 로딩하고 종료를 기다린 후 다음 조건으로
+넘어간다. GPU 작업은 한 실행기만 소유한다. adapter는
+`outputs/cc-official-tutorial-v5-max-steps-100-20261004-v1/gpt_oss_lora/`를 사용한다.
+패키지 정본은 `configs/environments/cc-native-step100/pyproject.toml`과
+`uv.lock`이며 이번 작업에서 패키지를 변경하지 않았다.
+
+**변경 파일과 동작:**
+
+- `scripts/run_cc_native_validation100.py`: 기존 기본값native를 유지하면서
+  명시적 `cache_policy: dynamic`을 추가했다. 복사한 generation config와
+  `cache_implementation="dynamic"`을 함께 전달한다. 매 generate 호출의 첫
+  self-attention 모듈에서 prefill·decode cache class를 검사하고 DynamicCache가
+  아니거나 관측되지 않으면 실패한다. raw 결과에 cache 관측과 생성 구간
+  peak allocated/reserved를 기록한다. 동적 실험 채점은 이 관측 증거가 없는
+  출력을 거부한다. `verify`는 모델을 로딩하지 않고 동결 입력을 검증한다.
+- `scripts/track_cc_native_validation100.py`: 캐시 방식과 실행기SHA를 새 W&B
+  run identity/config에 반영한다. 기존native run identity는 유지한다.
+  기존의 원문·token ID 비전송 규칙과600회 집계를 유지한다. 메모리 세부값은
+  로컬 raw 기록에 남기며 이번 변경으로 원격 전송 항목을 추가하지 않았다.
+- `configs/cc_dynamic_base_validation100_v1.json`,
+  `configs/cc_dynamic_adapter_validation100_v1.json`: 출력과W&B run을 분리한
+  각600회 설정이다. 기존native 설정이나B200 레시피를 수정하지 않는다.
+- `tests/test_cc_native_validation100.py`, `tests/test_cc_native_wandb.py`:
+  wrapper의 config 덮어쓰기, 실제 cache 불일치·관측 누락, hook 정리,
+  비교 입력·실행기 변경, 잘못된 출력 채점, 추적 identity·원문 제외를 검증한다.
+
+**실제로 완료한 CPU 준비:** 두 설정 모두 prepare→verify→score를 수행했다.
+train·validation·selection·frozen input·prompt·gold·adapter의7개SHA를 기존
+`outputs/cc-native-base-validation100-fresh-process-20261006-v1/`과 대조했다.
+두 설정 모두 입력232–980token, ID·user content train overlap0이다.
+실행기SHA-256은
+`c2597d7f1e09aa0f44e32593e3b0a899323b0971ef3c5edc4cf116e4cb28b0e7`이다.
+실행기 변경 후에는 기존 준비를 수정하지 않고 새 실험명으로 prepare한다.
+
+아래는 CPU 준비 명령의 base 예시다. adapter는 config 파일명을
+`cc_dynamic_adapter_validation100_v1.json`으로 바꾼다. 현재 로컬에서는 이미
+완료했으므로 prepare를 다시 실행하지 않는다. Git clone만으로는 Git 제외
+동결 자료·모델·기존adapter가 생기지 않으며 위 reference 경로들이 필요하다.
+
+```bash
+experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python scripts/run_cc_native_validation100.py prepare --config configs/cc_dynamic_base_validation100_v1.json
+experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python scripts/run_cc_native_validation100.py verify --config configs/cc_dynamic_base_validation100_v1.json
+experiments/cc-official-tutorial-v5-score/.venv/bin/python scripts/run_cc_native_validation100.py score --config configs/cc_dynamic_base_validation100_v1.json
+```
+
+산출물은 `outputs/cc-dynamic-{base,adapter}-validation100-20261008-v1/`의
+`prepared.json`, `preflight.json`, `confusion-matrices.json/.md`다.
+raw 결과는0건이고 worker receipt도 없다. W&B 전송용 config와 빈 결과표는
+로컬에서 validation을 통과했지만 새로운 온라인 연결은 아직 검증하지 않았다.
+실험 시작 시 아래tracker를 별도 터미널에서 먼저 실행하고 `wandb-link.json`과
+`wandb-progress.json`의 online·0/600을 확인한 뒤 base run을 시작한다.
+다음 두 명령은 이번 준비 단계에서는 실행하지 않았다.
+
+```bash
+.venv/bin/python scripts/track_cc_native_validation100.py --config configs/cc_dynamic_base_validation100_v1.json --wandb
+experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python scripts/run_cc_native_validation100.py run --config configs/cc_dynamic_base_validation100_v1.json
+```
+
+단일 입력 진단과 새 정식 실행기는 구분한다. 이전 진단은 GPU에서 검증했지만
+이번 통합 실행기의 실제 GPU 동작과 전체100건 완주는 아직 미검증이다.
+
+최종 사전 검증: `uv run pytest tests/` 586건 통과,
+`uv run ruff check .`, `uv run ruff format --check .`,
+`uv run mypy aegislm/ tests/`, `git diff --check` 통과.
+준비 브랜치는 `experiment/a6000-dynamic-cache`이며 이 기록 시점에는
+커밋·푸시 전이다. 동결 데이터·adapter·generated artifact는 Git에서 제외한다.
+
 ### 2026-10-07: 환경별 실험표 정리와 B200 재현 기록 갱신
 
 사용자는 A6000 표를 확인하고 B200를 환경별로 따로 기록하도록 요청했다.
