@@ -4236,3 +4236,153 @@ experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python
 `uv run mypy aegislm/ tests/`, `git diff --check` 통과.
 준비 브랜치는 `experiment/a6000-dynamic-cache`이며 이 기록 시점에는
 커밋·푸시 전이다. 동결 데이터·adapter·generated artifact는 Git에서 제외한다.
+
+#### 2026-10-08: 동적 캐시 평가 착수 승인과 실행 인계
+
+준비 코드는 `b53a84f`로 `experiment/a6000-dynamic-cache`에 커밋·푸시했다.
+사용자가 위 표대로 실행하고 단일 `gpt-6-luna` tester에게 GPU 작업을 맡기도록
+승인했다. 담당은 `/root/dynamic_cache_tester`, 모드는 verify다. root는 반복
+실행·CPU 채점·로그와 기록 작성을 승인하며, 패키지 설치·환경·드라이버·시스템
+설정 변경은 사용자 확인을 받는다. 도구의 시스템 권한 승인을 root가 대신할
+수 있다는 의미는 아니다. 두 output의 `execution-authorization.json`에
+허용 범위와 base→adapter 전환 기준을 기록했다.
+
+base600 완료,6조건 정상 종료와 순차 프로세스·초기 메모리0, 실제DynamicCache,
+adapter hash 불변, 최종 채점·W&B 기록 완료와GPU worker 종료를 확인하면
+같은 설정의 adapter600 실행은 추가 허락 없이 진행하도록 승인했다.
+invalid/uncertain 예측은 관측할 평가 결과이며 실행 오류와 구분한다.
+실행 오류·무결성 검사 실패·새 환경 변경 필요 시에는 중단하고 보고한다.
+
+첫 base tracker는 GPU 실행 전 `ServicePollForTokenError`로 종료했다.
+로그에 `Operation not permitted`가 있어 sandbox 서비스 시작 제한으로
+판단했다. root가 정상 권한의 W&B API로 동일run ID
+`source-v2-evaluation-4afe23e80c9d977c`를 조회해 원격run 부재를 확인했다.
+초기receipt는 `logging_ambiguous`로 보존하고, root는 같은ID의
+`--wandb-reconcile retry-logging` 1회를 정식 권한 요청 경로로 승인했다.
+이는 GPU 실험 재시도가 아니며 원 실패로그·영수증을 삭제하지 않는다.
+새 온라인 연결과 실제 생성 시작 여부는 이후 link/progress·worker 기록으로
+판정하며, 이 인계 기록 자체가 실험 완료 증거는 아니다.
+
+#### 2026-10-09: 동적 캐시 base600 완료 확인과 adapter 인계
+
+root가2026-10-09 10:50 KST에 산출물을 확인했다. base는2026-10-08
+23:57:43 KST에600/600을 완료했고 여섯 생성 상한마다100건씩 기록됐다.
+모든 raw에 DynamicCache 관측이 있으며 여섯 worker는 서로 다른PID로
+순차 실행·exit0 종료했다. 모든 조건의 모델 로딩 전 allocated/reserved는0,
+7개 동결해시와adapter는 불변이고 최종 채점·W&B600업로드 영수증도 완료됐다.
+오류파일은 없으며 확인 시GPU compute process는 없었다.
+
+종료 이유는 native EOS457건·token limit143건, 실제 최대 생성4936token,
+생성 구간 peak allocated 최대13.133GiB다.65536·130000상한의100건 평가도
+완료했지만 실제13만token을 생성한 결과는 아니다. 평가 품질은 별도 해석한다.
+근거는 base output의 `root-phase-transition-audit.json`, 조건별receipt,
+raw·최종confusion matrix 및
+[W&B base run](https://wandb.ai/erad3254-looking-for-a-job/aegislm/runs/source-v2-evaluation-4afe23e80c9d977c)이다.
+
+같은 확인 시점에 adapter는0/600, 기존tester는 비활성 상태였다.
+adapter로 자동 전환되지 않은 이유는 확인하지 못했다. root는 이미 승인된
+전환 조건을 모두 검증하고 새 단일 `gpt-6-luna` tester
+`/root/dynamic_adapter_tester`에게 남은adapter600회를 인계했다.
+동일 설정·출력 경로를 사용하며 아직생성되지않은adapter의 최초실행이다.
+base를 재실행하거나 결과를 덮어쓰지 않는다. adapter 시작·완료 여부는
+이후 실제progress와W&B기록으로 판정한다.
+
+<a id="2026-10-10-dynamic-cache-results"></a>
+
+#### 2026-10-10: 동적 캐시 base·adapter 전체 결과 분석
+
+adapter는2026-10-10 00:24:05 KST에 생성·로컬 채점600/600을 완료했다.
+root가 양쪽 raw 각600건,12개 조건의 exit0·조건별 서로 다른worker PID,
+모델 로딩 전 allocated/reserved0 및 모든 출력의 DynamicCache 관측을 직접
+확인했다. 양쪽 frozen-inputs·prompts·gold 파일은 바이트 단위로 동일하다.
+확인 시 A6000은 GPU utilization0%, 메모리146MiB로 실행이 끝난 상태였다.
+실행 revision·명령·환경·동결해시는 adapter output의
+`experiment-result.json`과 앞 절의 준비·실행 기록을 따른다.
+
+생성 상한별 strict schema 결과는 다음과 같다. 각 조건은 동일한 양성50·음성50건이다.
+정답은 `(TP+TN)/100`이며 uncertain·invalid를 분모에서 제외하지 않는다.
+schema 유효에는 uncertain도 포함한다. 아래 B/A는 base/adapter다.
+
+| 생성 상한 | schema 유효 B/A | 정답 B/A | uncertain B/A | invalid B/A |
+| --- | ---: | ---: | ---: | ---: |
+| 128 | 0 / 0 | 0 / 0 | 0 / 0 | 100 / 100 |
+| 512 | 44 / 35 | 14 / 16 | 19 / 0 | 56 / 65 |
+| 2048 | 84 / 79 | 38 / 44 | 25 / 0 | 16 / 21 |
+| 65536 | 77 / 87 | 23 / 50 | 39 / 0 | 23 / 13 |
+| 130000 | 82 / 92 | 33 / 57 | 30 / 0 | 18 / 8 |
+| context-minus-input | 88 / 84 | 34 / 46 | 32 / 0 | 12 / 16 |
+
+기존 `confusion-matrices.md`는 semantic 판정 표이며,130000의adapter는
+추가scope필드가 있는1건을FP로 세므로FP9·invalid7이다.
+strict는 같은1건을invalid로 세어FP8·invalid8이다. 다른 조건은 두 행렬이 일치한다.
+
+**Confusion matrix로 읽는 결과:** 아래 표는 사용자가 보는 `.md`와 동일한
+semantic 기준이다. TP는 실제 present→present, FN은 실제 present→not_observed,
+FP는 실제 not_observed→present, TN은 실제 not_observed→not_observed다.
+uncertain과 invalid는 FN/FP로 합치지 않고 별도로 표시한다. invalid는 생성
+프로세스 실패를 뜻하지 않으며 최종 판정을 읽지 못한 응답을 포함한다.
+각 행의 여섯 수 합은 100이다. 라벨은 원천 데이터 기준이며 아직 미검수다.
+
+| 모델 | 생성 상한 | 정탐 TP | 미탐 FN | 오탐 FP | 정상 TN | 판단 유보 | 출력 오류 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| base | 128 | 0 | 0 | 0 | 0 | 0 | 100 |
+| adapter | 128 | 0 | 0 | 0 | 0 | 0 | 100 |
+| base | 512 | 3 | 9 | 2 | 11 | 19 | 56 |
+| adapter | 512 | 1 | 15 | 4 | 15 | 0 | 65 |
+| base | 2048 | 10 | 20 | 1 | 28 | 25 | 16 |
+| adapter | 2048 | 14 | 26 | 9 | 30 | 0 | 21 |
+| base | 65536 | 5 | 14 | 1 | 18 | 39 | 23 |
+| adapter | 65536 | 14 | 26 | 11 | 36 | 0 | 13 |
+| base | 130000 | 11 | 15 | 4 | 22 | 30 | 18 |
+| adapter | 130000 | 20 | 27 | 9 | 37 | 0 | 7 |
+| base | context-minus-input | 8 | 19 | 3 | 26 | 32 | 12 |
+| adapter | context-minus-input | 16 | 26 | 12 | 30 | 0 | 16 |
+
+130000 조건을 실제 라벨×모델 판정으로 펼치면 다음과 같다.
+
+| 모델·실제 라벨 | 판정 present | 판정 not_observed | 판정 uncertain | 출력 오류 |
+| --- | ---: | ---: | ---: | ---: |
+| base·present 50건 | 11 | 15 | 14 | 10 |
+| base·not_observed 50건 | 4 | 22 | 16 | 8 |
+| adapter·present 50건 | 20 | 27 | 0 | 3 |
+| adapter·not_observed 50건 | 9 | 37 | 0 | 4 |
+
+adapter의 양성 50건 중 27건(54%)은 음성으로 판정됐고, 출력 오류 3건까지 합하면
+30건에서 양성 탐지가 이뤄지지 않았다. 전체 present 판정 29건·not_observed 판정
+64건으로 음성 판정이 많지만, 이것만으로 학습 데이터 불균형이나 원인을 확정하지
+않는다. 판단 유보·출력 오류가 줄며 정탐과 미탐, 정상 판단과 오탐이 모두 증가했다.
+출력 완성률 개선을 탐지 정확도 개선과 동일시하지 않는다.
+
+**実行安定性:** 両モデルとも65536以上の3条件で全件native EOSとなり、
+今回の100入力ではOOMが再発しなかった。全条件を通じた実生成最大は
+base4936token・adapter3266token、生成区間peak allocated最大はそれぞれ
+13.133GiB・13.477GiBだった。高い生成上限で完走した証拠であり、
+実際に13万tokenの生成・長い入力を処理できた証拠ではない。
+
+**判断品質:** adapterは600出力でuncertainが0だった。130000条件では
+正答33→57件だが、strictのTP11→20・FP4→8でもある。adapterの陽性50件は
+TP20・FN27・invalid3に分かれ、検出できた割合は20/50=40%に留まる。
+baseがuncertainだった30件はadapterで正答17・誤答10・invalid3となった。
+判断を返す割合が増えたことと、判断の信頼性が上がったことは同一ではない。
+600件は同じ100入力の6条件であり、独立した600標本として扱わない。
+
+**生成上限の解釈:** 128では両者100件すべてtoken limitで終了し、adapterでは
+finalが100件とも無い。512でもbase42・adapter57件がtoken limitとなった。
+2048ではbase1・adapter4件に減り、65536以上では0件だった。
+一方でnative生成設定はdo_sample=true、temperature1.0、top_k50、top_p1.0、
+条件ごとのseed固定なしである。130000条件の57正答を「13万上限の因果効果」や
+最適上限と断定しない。130000でのadapter実生成最大は2446tokenだった。
+同条件のstrict invalid8件はHarmony parse error7件・schema違反1件であり、
+上限不足だけでは残存する出力契約の問題を説明できない。
+パーサーが受理しないヘッダーとモデルが壊したヘッダーは原token列で切り分ける。
+
+**追跡の未完了:** baseのW&Bは600/600・complete。adapterはローカル結果が
+600/600の一方、W&B進捗590/600・receipt=logging_ambiguousで止まった。
+trackerは最後のcontext-minus-input semantic行列のartifact名が128文字を
+超えてValueError、exit1となった。生成workerの失敗ではない。今回の分析は
+ローカル最終行列を使い、W&Bの全件反映を完了とは記録しない。
+原ログ・receiptを保持し、この分析中にGPU再実行・tracker再送はしていない。
+
+次の候補は追跡名の修正と保存済み結果の再送、同一入力の誤答・ヘッダーの監査、
+新しい実験名でseedを管理した生成条件の反復比較である。原ラベルは未検収で、
+test500は未使用のため、今回のラベル一致率だけで検出性能の確立とはしない。

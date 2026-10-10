@@ -28,6 +28,12 @@
 
 ## 문서 관리 규칙
 
+2026-10-10 논의와 확인 결과:
+
+- [동적 캐시 base·adapter 전체 결과와 confusion matrix](FINETUNING_EXPERIMENT_PLAN.md#2026-10-10-dynamic-cache-results): 생성·로컬 채점 완료, 미탐·오탐 해석, W&B 추적 미완료 구분.
+- [취약점 포함 C/C++ 프로젝트 자료](DATASET_CANDIDATES.md#2026-10-10-vulnerable-project-candidates): ARVO 다운로드 구성, Magma·OSS-Fuzz 후보, 기존 검수 이력, 바이너리 평가 경로.
+- [프로젝트 단위 평가 제안](EVALUATION_PLAN.md#2026-10-10-project-evaluation-proposal): 모델 입력과 정답 분리, 탐색·판단 구분, 수정 버전의 라벨 범위. 아직 미실행.
+
 최근 실험은 [SFTTrainer final-only 학습·native EOS 기록](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-sfttrainer-final-only-mask-eos-return),
 [최대 문맥 생성 비교](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-context-window-max-131072-generation-experiment),
 [원본 튜토리얼 학습·최대 생성 상한 비교](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-unsloth-original-max-new-tokens-131072-training),
