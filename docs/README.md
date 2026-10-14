@@ -28,6 +28,17 @@
 
 ## 문서 관리 규칙
 
+2026-10-14: [세 항목 평가의 확정 사항과 파일럿 준비안](EVALUATION_PLAN.md#2026-10-14-three-field-pilot).
+정답 자료·입력 분리·채점표·평가기 준비 순서, 코드 기반 CWE 참조 제공,
+개발용 파일럿과 최종 평가의 분리를 정리했습니다. 5쌍·10개 입력은 미실행 제안입니다.
+
+2026-10-13: [외부 보안 벤치마크의 채점 기준과 판정·근거·권고사항 평가 적용안](EVALUATION_PLAN.md#2026-10-13-benchmark-scoring).
+OWASP, NIST SATE, PrimeVul, CyberSOCEval, AutoPatchBench의 공식 기준과
+AegisLM의 제안을 구분해 기록했습니다. 심각도는 후속 과제이며 새 scorer는 미구현입니다.
+
+2026-10-12: [A6000 검증 전환](EVALUATION_PLAN.md#2026-10-12-a6000-verification-transition),
+[영문 CWE 사전 변환·조회 및 검증 결과](DATA_STRATEGY.md#2026-10-12-cwe-reference).
+
 2026-10-10 논의와 확인 결과:
 
 - [동적 캐시 base·adapter 전체 결과와 confusion matrix](FINETUNING_EXPERIMENT_PLAN.md#2026-10-10-dynamic-cache-results): 생성·로컬 채점 완료, 미탐·오탐 해석, W&B 추적 미완료 구분.

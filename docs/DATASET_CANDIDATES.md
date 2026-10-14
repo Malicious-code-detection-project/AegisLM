@@ -61,6 +61,13 @@
 
 ## 4. First-Pass Candidates
 
+2026-10-12 추가: [MITRE CWE](https://cwe.mitre.org/data/downloads.html)는
+`rag-candidate`인 영문 약점 참조 사전으로 사용한다. 정답이 붙은 프로젝트
+benchmark나 추가 학습 corpus로 취급하지 않는다. 공식 XML 4.20을 로컬에 보존하고
+JSON·Markdown·ID/키워드 조회를 구현했다. 원본·파생 사전은 Git 제외,
+MITRE 이용 조건과 저작권 표시를 함께 보존한다. 실제 모델 연결은 미실행이다.
+버전·해시·명령·누출 검토 조건은 [CWE 참조 사전 구축](DATA_STRATEGY.md#2026-10-12-cwe-reference)을 따른다.
+
 | Candidate | Source type | Data type | Current use tags | Git policy | Notes |
 | --- | --- | --- | --- | --- | --- |
 | APTNotes | GitHub, public report index | APT/CTI report metadata, report links, CSV/JSON summaries | `sft-candidate`, `rag-candidate`, `evaluation-candidate` | Link and small metadata fixture only | Public APT/campaign reports are useful for summarization, evidence extraction, and ATT&CK mapping tasks. Full report redistribution and license terms must be checked per source. |

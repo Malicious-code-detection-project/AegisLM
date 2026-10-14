@@ -1,5 +1,11 @@
 # GPT-OSS-20B Fine-Tuning Experiment Plan
 
+2026-10-12 현재 A6000 작업은 사용자 결정에 따라 **100-step adapter에서
+추가 파인튜닝을 마치고 실제 프로젝트 검증 준비로 전환**했다. 기존 함수 평가
+1200건·캐시 비교·결과 분석은 완료된 기록으로 보존한다. 이후 단계와 착수 검사는
+[프로젝트 검증 전환 기록](EVALUATION_PLAN.md#2026-10-12-a6000-verification-transition)을 따른다.
+아래 날짜별 계획·실패·완료 기록은 해당 실행 당시의 이력이다.
+
 2026-09-28 data reconstruction: the new provisional C/C++ decision corpus is
 `data/processed/cc-source-candidates-20260928-v5` (10,000/1,000/500).
 Its final overlap and 4,096-token training-format audits pass. The six-source

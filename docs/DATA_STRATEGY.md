@@ -663,3 +663,95 @@ v1은 삭제가 아니라 이관이다. 이 값은 metadata 보존 공간을 차
 `replay-export-audit.json`, 실행 로그·정리 스크립트·metadata 사본·`SHA256SUMS`.
 기존 history 묶음 52개 파일의 해시도 정리 전에 확인했다.
 CVEfixes DB의 과거 검증 해시는 재현 builder가 재사용했으며 이번에 DB 전체를 다시 해시하지 않았다.
+
+<a id="2026-10-12-cwe-reference"></a>
+
+## 2026-10-12: 영문 CWE 참조 사전 구축
+
+A6000의 현재 100-step adapter를 고정한 상태에서 프로젝트 검증을 준비한다.
+CWE는 우선 **외부 참조 사전**으로 사용하며 SFT/CPT 학습 데이터로 넣지 않는다.
+XML → JSON → Markdown 변환과 ID·영문 키워드 조회를 구현했다.
+벡터 DB·임베딩·모델 RAG 연결은 아직 구현하지 않았다.
+
+### 원본과 변환 계약
+
+[MITRE 공식 다운로드](https://cwe.mitre.org/data/downloads.html)의 전체 카탈로그
+`https://cwe.mitre.org/data/xml/cwec_latest.xml.zip`을 2026-10-12에 받았다.
+이번 파일의 실제 버전은 **4.20**, 카탈로그 날짜는 **2026-04-30**이다.
+`latest` URL은 바뀔 수 있으므로 재현 기준은 URL만이 아니라 보존한 파일·버전·SHA-256이다.
+ZIP 안의 파일은 `cwec_v4.20.xml`이며 XML SHA-256은
+`1f5a78bd62e00f86436b4fe32d5034a57e8f0da88e4063b2072b664ae510912e`다.
+
+원본 ZIP·XML·[이용 조건](https://cwe.mitre.org/about/termsofuse.html)·수집 URL·해시는
+Git 제외 `outputs/cwe-reference-acquisition-20261012-v1/`에 보존했다.
+변환 결과는 `outputs/cwe-reference-v4.20-en-20261012-v1/`에 있다.
+CWE 원문과 파생 자료는 MITRE 저작권·상표 표시 및 이용 조건 사본을 함께 보존한다.
+
+| 파일 | 내용·용도 |
+| --- | --- |
+| `source.xml`, `TERMS.html` | 입력 XML과 이용 조건의 정확한 바이트 사본 |
+| `catalog.json` | XML 요소 전체를 tag/attributes/text/tail/children으로 보존. namespace와 자식 순서를 유지하며 사례·참고문헌·이력도 포함 |
+| `entries.jsonl` | 1,450개 항목의 ID, kind, name, status, abstraction, catalog_version, source_url, sections. 조회용 축약본 |
+| `markdown/CWE-*.md` | Weakness 969개의 사람이 읽는 영문 문서. Deprecated도 명시적으로 보존 |
+| `manifest.json` | `aegislm.cwe-reference.v1`, 입력·모듈·산출물 해시, 항목 수, 허용 섹션 목록. 생성 마지막에 기록 |
+| `verification.json` | 실제 원본 구조 대조·해시 검사·조회 예시·잔여 CVE 언급 검사 결과. manifest 생성 후 별도 기록 |
+
+`catalog.json`은 XML 요소 구조를 보존하지만 XML 주석, namespace prefix 표기,
+선언 등 바이트 단위 표현은 보존하지 않는다. 정확한 원문은 `source.xml`이다.
+Category 422개·View 59개는 ID로 조회할 수 있지만 키워드 검색에서 제외한다.
+Deprecated도 키워드 검색에서 제외하고 ID 직접 조회만 허용한다.
+
+축약본의 허용 섹션은 Description, Extended_Description, Alternate_Terms,
+Related_Weaknesses, Applicable_Platforms, Common_Consequences, Detection_Methods,
+Potential_Mitigations, Mapping_Notes다. 관계의 속성, 매핑 주의사항과 항목 상태를
+유지한다. Observed_Examples, Demonstrative_Examples, References, Content_History는
+축약본에서 제외하고 전체 원본에 보존한다. 기존 학습 dataset schema와 prompt는 바꾸지 않는다.
+
+### 재현 및 조회 명령
+
+기존 `.venv`의 Python 표준 라이브러리만 사용하며 추가 패키지 설치는 필요 없다.
+`build`는 기존 출력 디렉터리와 Git 추적 대상·symlink 경로에 쓰지 않는다.
+재생성하려면 `--output`에 새 실행 이름을 사용한다.
+
+```bash
+.venv/bin/python scripts/cwe_reference.py build \
+  --xml outputs/cwe-reference-acquisition-20261012-v1/cwec_v4.20.xml \
+  --terms outputs/cwe-reference-acquisition-20261012-v1/TERMS.html \
+  --source-url https://cwe.mitre.org/data/xml/cwec_latest.xml.zip \
+  --output outputs/cwe-reference-v4.20-en-20261012-v1
+
+.venv/bin/python scripts/cwe_reference.py show \
+  --reference outputs/cwe-reference-v4.20-en-20261012-v1 --id CWE-125
+
+.venv/bin/python scripts/cwe_reference.py search \
+  --reference outputs/cwe-reference-v4.20-en-20261012-v1 \
+  --query "use after free" --limit 5
+```
+
+`show --format json`도 지원한다. 조회 시 manifest와 `entries.jsonl` 해시를 검사한다.
+다른 파일 전체의 재검사는 조회 때마다 수행하지 않는다.
+키워드 점수는 질의와 이름이 공유하는 고유 영숫자 단어 수 × 5 + 허용 섹션이 공유하는
+고유 단어 수이며 동점은 숫자 ID 순이다. BM25·의미 검색·모델 confidence가 아니다.
+불용어 제거와 형태소 처리도 없어 하위 순위에 무관한 후보가 섞일 수 있다.
+실제 조회에서 `out of bounds read` → CWE-125, `use after free` → CWE-416,
+`integer overflow` → CWE-190이 첫 결과였지만 검색 성능 평가 완료를 뜻하지 않는다.
+
+### 검증 결과와 모델 연결 전 조건
+
+Python 3.12.13, CPU에서 생성했다. 약점 969·분류 422·관점 59개, Markdown 969개,
+manifest에 기록한 973개 파일 해시와 XML→JSON→XML 요소 구조 일치를 확인했다.
+테스트는 합성 XML로 중복·비정상 ID, DTD 거부, 혼합 텍스트 보존, 사례 제외,
+Deprecated/Category/View 검색 제외, 덮어쓰기 거부와 변조 감지를 검증한다.
+전체 pytest **598개 통과**, Ruff check/format check와 mypy도 통과했다.
+
+사례 섹션 제외만으로 평가 정답 누출을 없앴다고 주장하지 않는다. 실제 허용 섹션에도
+**CWE-193의 Alternate_Terms, CWE-1420·1422의 Potential_Mitigations**에 CVE 번호가
+남아 있다. 원문 의미를 임의로 고치지 않고 보존했으며 아직 모델 입력에 연결하지 않았다.
+연결 전 평가 사례·프로젝트·패치와 겹치는 내용을 검토하고 제공 범위를 동결해야 한다.
+모델 조회에 `catalog.json` 전체를 제공하지 않고 검토한 축약본만 사용한다.
+검색 질의는 모델이 보는 소스나 관측 근거로 만들며 gold CWE·패치·CVE로 만들지 않는다.
+정답 CWE를 지정해 문서를 주는 실험은 별도의 oracle 조건으로 표시한다.
+
+이번 결과는 사전 변환·조회 검증이다. 취약점 판정 성능, 프로젝트 gold 검수 완료,
+RAG의 개선 효과를 뜻하지 않는다. GPU·학습·생성·W&B 전송은 수행하지 않았으며,
+후속 모델 실험의 W&B 필수 기준은 [평가 계획](EVALUATION_PLAN.md)을 따른다.
