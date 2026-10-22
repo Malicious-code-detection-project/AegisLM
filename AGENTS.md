@@ -6,6 +6,8 @@
 
 Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장소는 Project NuriLab의 내부 구현 모듈이 아니다.
 
+모델 구조와 학습 위치 연구(Phase G)는 별도 연구 저장소 `AegisLM_Architecture`가 맡는다. 두 저장소는 서로의 파일 경로를 직접 읽지 않고 manifest로 산출물을 주고받으며, A6000 GPU와 HF 캐시를 함께 쓴다. 기준은 `docs/RELATED_REPOSITORIES.md`를 따른다.
+
 ---
 
 ## 1. 시작 전 필독 - SSOT 지도
@@ -25,6 +27,8 @@ Project NuriLab과 협업 방식과 보안 철학은 공유하지만, 이 저장
 | 파인튜닝 학습 로드맵과 실험 전략 | `docs/FINETUNING_EXPERIMENT_PLAN.md` |
 | GPT-OSS 서빙·판단 학습·평가의 차이와 100step 오류 해석 | `docs/GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md` |
 | B200 동결 데이터 이관·100step 재학습·base/adapter 재현 절차 | `docs/B200_REPRODUCTION_RECIPE.md` |
+| 장비별 실험 환경, venv·lock·모델 revision, 관련 저장소와의 환경 대조 | `docs/EXPERIMENT_ENVIRONMENTS.md` |
+| 관련 저장소(`AegisLM_Architecture`)와의 역할·산출물·정본 경계 | `docs/RELATED_REPOSITORIES.md` |
 | A6000 환경·학습·생성의 보존 실험표와 확인 한계 | `docs/A6000_EXPERIMENT_TABLES.md` |
 | B200 두 GPU 실행 구성·학습·저장 검증·평가 준비 표 | `docs/B200_EXPERIMENT_TABLES.md` |
 | Phase C 테스트 기준과 평가 레퍼런스 | `docs/TEST_CRITERIA.md` |

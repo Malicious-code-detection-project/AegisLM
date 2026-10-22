@@ -211,6 +211,8 @@ v0 단계에서는 악성코드 유사 스크립트 동작 설명, 취약점 맥
 
 LoRA / QLoRA, dataset, evaluation이 충분히 안정된 뒤 직접 모델 구조 변경, custom layer, continued pretraining 같은 연구를 검토합니다. 이 단계는 장기 목표이며, v0에서는 architecture modification을 하지 않습니다.
 
+2026-10-22부터 구조와 학습 위치 연구는 별도 연구 저장소 `AegisLM_Architecture`에서 수행합니다. 이 저장소는 데이터·SFT 파이프라인과 평가를 맡고, 채택할 결과를 들여와 다시 검증합니다. 역할과 주고받는 산출물은 [관련 저장소와 경계](docs/RELATED_REPOSITORIES.md)에 둡니다.
+
 ## Project NuriLab과의 관계
 
 이 프로젝트는 Project Nurilab : 로컬 LLM 기반 악성코드 분석 자동화 시스템 개발 프로젝트에서 `로컬 LLM 파인 튜닝 또는 LLM 모델링` 부분을 담당하는 프로젝트입니다.
@@ -269,6 +271,8 @@ source configs/environments/cc-harmony-score/.venv/bin/activate
 - `docs/PHASE_E_TEAM_ONBOARDING.html` - Phase E 이슈 처리와 팀 교육 주제 인포그래픽
 - `docs/FINETUNING_EXPERIMENT_PLAN.md` - 파인튜닝 실험 계획
 - [B200 재현 레시피](docs/B200_REPRODUCTION_RECIPE.md) - 동결 데이터 이관, 100-step 재학습, base·adapter의 동일 100건 평가
+- [장비별 실험 환경](docs/EXPERIMENT_ENVIRONMENTS.md) - A6000·B200 패키지·lock·모델 revision 기록과 수집 절차
+- [관련 저장소와 경계](docs/RELATED_REPOSITORIES.md) - `AegisLM_Architecture`와의 역할, 산출물, 정본, 공유 자원 규칙
 - [A6000 실험표](docs/A6000_EXPERIMENT_TABLES.md) - 원 native 30/100-step, 2건 진단과 100건 평가의 보존 결과
 - [B200 실험표](docs/B200_EXPERIMENT_TABLES.md) - 두 GPU DDP 구성, 실패·완료 이력, rank별 학습 수치와 평가 준비 상태
 - `docs/PR_DESCRIPTION_TEMPLATE.md` - PR 본문 작성 템플릿

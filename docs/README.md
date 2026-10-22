@@ -22,6 +22,8 @@
 | [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md) | 파인튜닝 학습 로드맵, 실험 전략, 데이터셋 계획, [v5 판단 학습 실행·Unsloth 복구 기록](FINETUNING_EXPERIMENT_PLAN.md#2026-10-02-v5-decision-only-execution), [공식 GPT-OSS 예제 확보 기록](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-unsloth-official-gpt-oss-20b-reference), [기존 코드와 공식 마스킹 비교](FINETUNING_EXPERIMENT_PLAN.md#2026-10-04-final-only-mask-vs-empty-analysis-code-review) |
 | [GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md](GPT_OSS_SERVING_TRAINING_ERROR_ANALYSIS.md) | vLLM 서빙과 판단 SFT의 이론·조건 차이, 공식100step 원문 오류 분류, 확인된 사실과 가설·후속 대조 계획 |
 | [B200_REPRODUCTION_RECIPE.md](B200_REPRODUCTION_RECIPE.md) | 동결 v5 이관, 독립 uv TOML·lock, B200 100step 재학습과 조건별 모델 재로딩 평가 실행 절차 |
+| [EXPERIMENT_ENVIRONMENTS.md](EXPERIMENT_ENVIRONMENTS.md) | A6000·B200 장비와 venv별 패키지·lock·모델 revision 기록, `AegisLM_Architecture`와의 환경 대조, 공통 수집 절차 |
+| [RELATED_REPOSITORIES.md](RELATED_REPOSITORIES.md) | `AegisLM`과 `AegisLM_Architecture`의 역할, manifest로 주고받는 산출물, 정본, 공유 GPU·캐시 규칙 |
 | [A6000_EXPERIMENT_TABLES.md](A6000_EXPERIMENT_TABLES.md) | A6000 native 환경·30/100-step 학습, 2건 진단·100건 평가의 보존 결과와 확인 한계 |
 | [B200_EXPERIMENT_TABLES.md](B200_EXPERIMENT_TABLES.md) | B200 두 GPU 실행 구성·실패/완료·rank별 학습 결과·base/adapter 평가 준비 표 |
 | [PR_DESCRIPTION_TEMPLATE.md](PR_DESCRIPTION_TEMPLATE.md) | PR 본문 작성 템플릿과 체크리스트 |
