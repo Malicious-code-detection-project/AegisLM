@@ -1,4 +1,6 @@
 # AGENTS.md - AegisLM Collaboration Manual
+> 2026-09-18 V3.1.1-MD: operational harness: [HARNESS_V3_1](docs/HARNESS_V3_1.md), [snapshot](references/이정민/index.md). The harness defines collaboration methods; get current goals, state and execution limits from the latest user request and the relevant task document.
+
 
 이 문서는 `AegisLM` 저장소에서 코드를 작성하는 모든 주체가 따르는 협업 운영 규칙이다. 사람, Codex, Claude Code, Cursor, 기타 코딩 에이전트는 이 문서를 기준으로 작업한다.
 

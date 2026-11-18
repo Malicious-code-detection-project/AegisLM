@@ -354,6 +354,7 @@ Run a small PoC comparison before choosing the long-running training path.
 
 Candidate stacks:
 
+- LLaMA-Factory LoRA / QLoRA with DeepSpeed ZeRO-3
 - Unsloth QLoRA
 - Hugging Face TRL LoRA
 
@@ -375,6 +376,17 @@ Record for each PoC:
 - training time
 - output JSON validity
 - inference latency
+
+For the B200 multi-GPU server, use LLaMA-Factory as the default training runner.
+The current integration path is documented in
+`docs/LLAMA_FACTORY_B200_WANDB.md` and includes:
+
+- `scripts/export_llamafactory_dataset.py` for converting AegisLM JSONL records
+  into LLaMA-Factory dataset columns.
+- `configs/llamafactory/aegislm_security_lora_b200.yaml` for SFT LoRA training.
+- `configs/deepspeed/ds_z3_b200.json` for B200 ZeRO-3 sharding.
+- W&B logging through `report_to: wandb`, `run_name`, and runtime
+  `WANDB_*` environment variables.
 
 ## 10. Evaluation
 

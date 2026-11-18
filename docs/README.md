@@ -17,6 +17,11 @@
 | [PHASE_D_EXIT_CRITERIA.md](PHASE_D_EXIT_CRITERIA.md) | Phase D 완료 조건과 Phase E tiny SFT PoC 착수 gate |
 | [PHASE_E_TEAM_ONBOARDING.html](PHASE_E_TEAM_ONBOARDING.html) | Phase E 이슈 처리와 팀 교육 주제를 한 장으로 정리한 온보딩 인포그래픽 |
 | [FINETUNING_EXPERIMENT_PLAN.md](FINETUNING_EXPERIMENT_PLAN.md) | 파인튜닝 학습 로드맵, 실험 전략, 데이터셋 계획 |
+| [LLAMA_FACTORY_B200_WANDB.md](LLAMA_FACTORY_B200_WANDB.md) | B200 멀티 GPU LLaMA-Factory 실행, DeepSpeed ZeRO-3, W&B 로깅 절차 |
+| [B200_QWEN3_480B_MEMORY_PROCESS.md](B200_QWEN3_480B_MEMORY_PROCESS.md) | Qwen3-Coder 480B FP8 smoke 학습의 cgroup memory limit 원인 분석, observe-only telemetry, 팀 실행 체크리스트 |
+| [MODEL_LIMIT_PROBES.md](MODEL_LIMIT_PROBES.md) | B200 800GiB container profile에서 후보 모델 load-only 한계를 측정하는 manifest, CLI, telemetry 절차 |
+| [FULL_SIZE_TRAINING_QUEUE.md](FULL_SIZE_TRAINING_QUEUE.md) | Full dataset training queue after retiring Qwen2/72B from the active run order |
+| [DEEPSPEED_ZERO3_DTYPE_MISMATCH.md](DEEPSPEED_ZERO3_DTYPE_MISMATCH.md) | DeepSpeed 0.19.2 ZeRO-3 + PEFT LoRA + bf16 dtype mismatch 분석과 ZeRO-2 diagnostic 절차 |
 | [PR_DESCRIPTION_TEMPLATE.md](PR_DESCRIPTION_TEMPLATE.md) | PR 본문 작성 템플릿과 체크리스트 |
 | [QUALITY_GATES.md](QUALITY_GATES.md) | 코드 변경 PR의 pytest, ruff, mypy 검사 기준 |
 | [TEST_CRITERIA.md](TEST_CRITERIA.md) | Phase C 테스트 기준, JSON schema 검증 기준, 평가 레퍼런스 |
@@ -29,3 +34,6 @@
 - 성격이 독립적인 기준이면 `docs/`에 새 문서를 만든다.
 - 문서를 추가하거나 이동하면 `README.md`, `docs/README.md`, `AGENTS.md`의 링크와 작업 규칙을 함께 갱신한다.
 - schema, dataset format, prompt contract, evaluation metric 변경은 관련 문서와 테스트를 함께 갱신한다.
+
+- [V3.1.1-MD project harness](HARNESS_V3_1.md)
+- [GPT-OSS-20B pilot training table](GPT_OSS_PILOT_20260918.md)

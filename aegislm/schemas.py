@@ -9,6 +9,7 @@ SOURCE_TYPES = (
     "cisa_kev",
     "mitre_attack",
     "public_cti",
+    "public_security_dataset",
     "nurilab_synthetic",
     "nurilab_analysis",
 )

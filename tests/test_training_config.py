@@ -1,5 +1,7 @@
 import os
 import json
+from pathlib import Path
+
 import pytest
 from aegislm.training.config import load_config, validate_paths
 
@@ -111,3 +113,46 @@ def test_validate_paths_git_policy_violation():
     with pytest.raises(ValueError) as excinfo:
         validate_paths(config, ignore_dataset_missing=True)
     assert "Path violation" in str(excinfo.value)
+
+
+def test_b200_smoke_configs_use_model_artifact_root():
+    """B200 LLaMA-Factory configs should keep artifacts under model/."""
+    common_config_paths = [
+        Path("configs/llamafactory/b200/qwen3_coder_480b_fp8_lora_smoke.yaml"),
+        Path("configs/llamafactory/b200/qwen3_coder_480b_lora_smoke.yaml"),
+    ]
+
+    for config_path in common_config_paths:
+        text = config_path.read_text(encoding="utf-8")
+        assert "model_name_or_path: model/base/" in text
+        assert "output_dir: model/adapters/" in text
+        assert "logging_dir: model/runs/" in text
+
+
+def test_b200_smoke_configs_use_expected_deepspeed_profiles():
+    """FP8 and non-FP8 smoke configs intentionally use different DS profiles."""
+    fp8_text = Path(
+        "configs/llamafactory/b200/qwen3_coder_480b_fp8_lora_smoke.yaml"
+    ).read_text(encoding="utf-8")
+    non_fp8_text = Path(
+        "configs/llamafactory/b200/qwen3_coder_480b_lora_smoke.yaml"
+    ).read_text(encoding="utf-8")
+
+    assert "deepspeed: configs/deepspeed/ds_z3_fp8_b200.json" in fp8_text
+    assert "fp8: true" in fp8_text
+    assert "fp8_backend: torchao" in fp8_text
+    assert "deepspeed: configs/deepspeed/ds_z3_b200.json" in non_fp8_text
+
+
+def test_qwen3_coder_next_full_config_uses_full_dataset_and_artifact_root():
+    """Qwen3-Coder-Next is the first active full-size training target."""
+    text = Path("configs/llamafactory/b200/qwen3_coder_next_lora_full.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "model_name_or_path: model/base/qwen3-coder-next" in text
+    assert "dataset: aegislm_security_sft_train_full" in text
+    assert "eval_dataset: aegislm_security_sft_validation_full" in text
+    assert "max_samples" not in text
+    assert "max_steps" not in text
+    assert "output_dir: model/adapters/qwen3-coder-next/lora/full" in text

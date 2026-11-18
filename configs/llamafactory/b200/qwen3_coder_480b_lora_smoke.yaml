@@ -1,0 +1,55 @@
+### model
+model_name_or_path: model/base/qwen3-coder-480b-a35b-instruct
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all
+lora_rank: 8
+lora_alpha: 16
+lora_dropout: 0.05
+deepspeed: configs/deepspeed/ds_z3_b200.json
+
+### dataset
+dataset: aegislm_security_sft_train
+eval_dataset: aegislm_security_sft_validation
+dataset_dir: LLaMA-Factory/data
+template: qwen3_nothink
+cutoff_len: 2048
+max_samples: 100
+overwrite_cache: true
+preprocessing_num_workers: 16
+dataloader_num_workers: 4
+
+### output
+output_dir: model/adapters/qwen3-coder-480b/lora/smoke
+logging_dir: model/runs/qwen3-coder-480b/lora/smoke
+logging_steps: 1
+save_strategy: steps
+save_steps: 10
+save_total_limit: 2
+plot_loss: true
+overwrite_output_dir: true
+save_only_model: false
+report_to: wandb
+run_name: malware-analysis-qwen3-coder-480b-lora-smoke
+
+### train
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-4
+num_train_epochs: 1.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+fp16: false
+gradient_checkpointing: true
+ddp_timeout: 180000000
+resume_from_checkpoint: null
+
+### eval
+per_device_eval_batch_size: 1
+eval_strategy: steps
+eval_steps: 10

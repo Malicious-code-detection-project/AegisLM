@@ -1,0 +1,39 @@
+{
+  "experiment_id": "gpt-oss-20b-qwen-contract-100step-20260921-001",
+  "model_id": "openai/gpt-oss-20b",
+  "model_revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+  "model_attestation_sha256": "80360825ddaffd3a3fa80ec85497c1161eeed00fefdce93213ec72305ec48b8e",
+  "template_date": "2026-09-21",
+  "expected_versions": {
+    "torch": "2.12.1+cu130",
+    "transformers": "5.9.0",
+    "peft": "0.19.1",
+    "datasets": "4.8.5",
+    "accelerate": "1.13.0"
+  },
+  "model_root": "<WORKSPACE>/LLM/Model/base/gpt-oss-20b-6cee5e81",
+  "run_root": "<WORKSPACE>/LLM/TrainingArtifacts/pilots/gpt-oss-20b-qwen-contract-100step-20260921-001",
+  "seed": 20260728,
+  "max_steps": 100,
+  "gradient_accumulation_steps": 32,
+  "learning_rate": 0.0001,
+  "lora_rank": 8,
+  "lora_alpha": 16,
+  "max_length": 4096,
+  "max_new_tokens": 512,
+  "gpu": 0,
+  "max_wall_seconds": 3600,
+  "training_runs_allowed": 2,
+  "full_training_approved": false,
+  "nurilab_deployment_approved": false,
+  "dataset_root": "<WORKSPACE>/LLM/Data/processed",
+  "legacy_repo": "<HOME>/workspace/AegisLM-B200",
+  "generation_limits": {
+    "evidence": 512,
+    "decision": 128
+  },
+  "authorization": "User manually launches Q1R10 decision and Q1R11 evidence comparisons, 100 optimizer steps each, original data and strict Qwen evaluators, no additional runs.",
+  "group_metadata": [
+    "<WORKSPACE>/LLM/Data/processed/phase-f-source-v5-r1/eligible_manifest.parquet"
+  ]
+}

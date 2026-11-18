@@ -195,6 +195,42 @@ Fine-tuning 또는 tiny dataset record는 아래 방향으로 설계합니다.
 - code snippet은 방어적 정적 분석에 필요한 최소 metadata로 축약한다.
 - raw data와 processed data의 경계를 명확히 기록한다.
 
+### 9.1 Public Security Dataset Builder
+
+기존 `instruction/input/output` 형태의 보안 SFT 빌더는 LLaMA-Factory에 바로 넣기보다 AegisLM 공통 record로 먼저 정규화한다.
+
+현재 구현 경로:
+
+```text
+raw or legacy dataset
+-> scripts/build_security_dataset.py
+-> AegisLM canonical JSONL
+-> scripts/export_llamafactory_dataset.py
+-> LLaMA-Factory dataset JSON
+```
+
+중요한 변환 원칙:
+
+- CTF write-up 전문, exploit narrative, patch code 전문은 supervised target output에 복사하지 않는다.
+- DiverseVul/BigVul 같은 코드 데이터셋은 방어적 정적 분석 설명 record로 바꾼다.
+- BigVul의 `func_after`는 fixed pair 존재와 hash metadata로만 남기고, 모델 target에 전체 패치 코드를 넣지 않는다.
+- 기존 Alpaca row의 `output`은 redacted source evidence로 취급하고 AegisLM JSON target에는 보수적 설명만 넣는다.
+- 최종 LLaMA-Factory `instruction/input/output` 변환은 exporter가 담당한다.
+
+예시:
+
+```bash
+uv run python scripts/build_security_dataset.py \
+  --legacy-alpaca /data/security_sft_dataset.json \
+  --output data/aegislm_security_train.jsonl \
+  --split train
+
+uv run python scripts/export_llamafactory_dataset.py \
+  --input data/aegislm_security_train.jsonl \
+  --output data/aegislm_security_sft.json \
+  --ignore-errors
+```
+
 ## 10. Tokenization and Chunking
 
 Tokenization은 fine-tuning에 필수입니다. 텍스트를 기준 모델 tokenizer의 token id로 변환해 학습하기 때문입니다.

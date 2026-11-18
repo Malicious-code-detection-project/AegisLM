@@ -12,19 +12,27 @@ wheels/
 # Virtual environments
 .venv/
 
+# Local checkout installed separately on the GPU server
+LLaMA-Factory/
+
 # Local environment and secrets
 .env
 .env.*
 !.env.example
 
 # Local datasets and model artifacts
+data
 data/
+model
+model/
 raw_datasets/
 artifacts/
 checkpoints/
 adapters/
+model_artifacts/
 models/
 outputs/
+saves/
 runs/
 wandb/
 mlruns/

@@ -1,0 +1,30 @@
+{
+  "experiment_id": "gpt-oss-20b-reviewed-decision-pilot-20260918-001",
+  "model_id": "openai/gpt-oss-20b",
+  "model_revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+  "model_attestation_sha256": "80360825ddaffd3a3fa80ec85497c1161eeed00fefdce93213ec72305ec48b8e",
+  "template_date": "2026-09-18",
+  "expected_versions": {
+    "torch": "2.12.1+cu130",
+    "transformers": "5.9.0",
+    "peft": "0.19.1",
+    "datasets": "4.8.5",
+    "accelerate": "1.13.0"
+  },
+  "model_root": "<WORKSPACE>/LLM/Model/base/gpt-oss-20b-6cee5e81",
+  "source_root": "<WORKSPACE>/LLM/Data/processed/phase-f-sard-grounded-v3-20260918-r4",
+  "run_root": "<WORKSPACE>/LLM/TrainingArtifacts/pilots/gpt-oss-20b-reviewed-decision-pilot-20260918-001",
+  "seed": 20260918,
+  "max_steps": 32,
+  "gradient_accumulation_steps": 4,
+  "learning_rate": 0.0001,
+  "lora_rank": 8,
+  "lora_alpha": 16,
+  "max_length": 2048,
+  "max_new_tokens": 512,
+  "gpu": 0,
+  "max_wall_seconds": 3600,
+  "training_runs_allowed": 1,
+  "full_training_approved": false,
+  "nurilab_deployment_approved": false
+}

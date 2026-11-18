@@ -1,0 +1,11 @@
+{
+  "aegislm_security_sft": {
+    "columns": {
+      "prompt": "instruction",
+      "query": "input",
+      "response": "output",
+      "system": "system"
+    },
+    "file_name": "aegislm_security_sft.json"
+  }
+}
