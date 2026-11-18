@@ -111,6 +111,32 @@ def verify_comparison(config: dict[str, Any], audit: dict[str, Any], old: Path) 
         raise ValueError("Prepared dynamic runner changed; prepare a new experiment")
 
 
+def model_load_kwargs(config: dict[str, Any], visible_devices: int) -> dict[str, Any]:
+    """Require both visible GPUs for the explicitly requested model sharding."""
+    placement = config.get("model_device_map")
+    if placement is None:
+        return {}
+    if placement != "balanced" or config.get("model_gpu_count") != 2:
+        raise ValueError("Unsupported model placement")
+    if visible_devices != 2:
+        raise ValueError("Model sharding requires exactly two visible GPUs")
+    return {"device_map": "balanced"}
+
+
+def verify_model_placement(model: Any, config: dict[str, Any]) -> dict[str, Any]:
+    """Check actual parameter devices, not only visibility or requested placement."""
+    devices = sorted({str(parameter.device) for parameter in model.parameters()})
+    if config.get("model_device_map") == "balanced" and devices != ["cuda:0", "cuda:1"]:
+        raise ValueError(f"Model must occupy both GPUs without CPU offload: {devices}")
+    return {
+        "requested_device_map": config.get("model_device_map", "native"),
+        "parameter_devices": devices,
+        "hf_device_map": {
+            str(k): str(v) for k, v in getattr(model, "hf_device_map", {}).items()
+        },
+    }
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -160,6 +186,7 @@ def select_prompts(
 
 
 def generation_budget(budget: int | str, input_length: int, context: int) -> int:
+    # 숫자 상한은 그대로 쓰고, 최대 문맥 조건은 입력 토큰을 뺀 남은 공간만 생성한다.
     maximum = context - input_length if budget == "context-minus-input" else int(budget)
     if maximum <= 0 or input_length + maximum > context:
         raise ValueError("Requested generation budget does not fit the context")
@@ -171,6 +198,7 @@ def verify_preparation(config: dict[str, Any], root: Path, old: Path) -> dict[st
     audit = read(root / "prepared.json")
     if config != read(root / "config.json"):
         raise ValueError("Frozen configuration changed")
+    # 동결 입력·gold·adapter의 현재 해시를 준비 당시 기록과 대조한다.
     for path, key in (
         (root / "frozen-inputs.json", "frozen_input_sha256"),
         (root / "prompts.json", "prompts_sha256"),
@@ -180,6 +208,11 @@ def verify_preparation(config: dict[str, Any], root: Path, old: Path) -> dict[st
         if digest(path) != audit[key]:
             raise ValueError(f"Frozen artifact changed: {path.name}")
     verify_comparison(config, audit, old)
+    if config.get("model_device_map") is not None and any(
+        audit.get(key) != config.get(key)
+        for key in ("model_device_map", "model_gpu_count")
+    ):
+        raise ValueError("Frozen model placement differs")
     return cast(dict[str, Any], audit)
 
 
@@ -251,6 +284,11 @@ def prepare(config: dict[str, Any], root: Path, old: Path) -> None:
     if cache_policy(config) == "dynamic":
         audit["runner_sha256"] = digest(Path(__file__))
     verify_comparison(config, audit, old)
+    if config.get("model_device_map") is not None:
+        audit.update(
+            model_device_map=config["model_device_map"],
+            model_gpu_count=config["model_gpu_count"],
+        )
     write(root / "prepared.json", audit)
 
 
@@ -308,10 +346,21 @@ def _generate_condition(
     audit = verify_preparation(config, root, old)
     policy = cache_policy(config)
     adapter = old / "gpt_oss_lora/adapter_model.safetensors"
+    # frozen에는 생성에 쓸 입력 토큰만 담긴다. 정답은 별도 gold.json에 있어 입력에 넣지 않는다.
     frozen = read(root / "frozen-inputs.json")
     run_id = now()
     completed = len(list((root / "raw").glob("*.json")))
+    # base는 원 모델을, adapter는 이번 학습에서 저장한 LoRA를 불러온다.
     identifier = "unsloth/gpt-oss-20b" if kind == "base" else str(old / "gpt_oss_lora")
+    load_kwargs = model_load_kwargs(config, torch.cuda.device_count())
+    # 모델 하나의 레이어를 두 GPU에 나눈다. 평가 조건과 모델은 계속 순차 실행한다.
+    gpu_memory_before = {
+        str(i): {
+            "allocated_bytes": torch.cuda.memory_allocated(i),
+            "reserved_bytes": torch.cuda.memory_reserved(i),
+        }
+        for i in range(torch.cuda.device_count())
+    }
     before_load = {
         "allocated_bytes": torch.cuda.memory_allocated(),
         "reserved_bytes": torch.cuda.memory_reserved(),
@@ -322,7 +371,10 @@ def _generate_condition(
         max_seq_length=config["runtime_context"],
         load_in_4bit=True,
         full_finetuning=False,
+        **load_kwargs,
     )
+    placement = verify_model_placement(model, config)
+    input_device = model.get_input_embeddings().weight.device
     write(
         root / "conditions" / f"{kind}-{budget}-runtime.json",
         {
@@ -333,6 +385,15 @@ def _generate_condition(
             "budget": budget,
             "execution_protocol": ISOLATION_PROTOCOL,
             "memory_before_model_load": before_load,
+            "model_placement": placement,
+            "gpu_memory_before_model_load": gpu_memory_before,
+            "gpu_memory_after_model_load": {
+                str(i): {
+                    "allocated_bytes": torch.cuda.memory_allocated(i),
+                    "reserved_bytes": torch.cuda.memory_reserved(i),
+                }
+                for i in range(torch.cuda.device_count())
+            },
             "memory_after_model_load": {
                 "allocated_bytes": torch.cuda.memory_allocated(),
                 "reserved_bytes": torch.cuda.memory_reserved(),
@@ -350,9 +411,11 @@ def _generate_condition(
             "backward_calls": 0,
         },
     )
+    # 모든 모델·상한에 같은 동결 표본 순서를 적용한다. ident는 표본 ID다.
     for ident, values in frozen.items():
         path = root / "raw" / f"{kind}-{budget}-{ident}.json"
         if path.exists():
+            # 부분 조건을 이어 생성하면 native sampling의 난수 흐름이 달라져 재개를 거부한다.
             raise ValueError("Partial conditions cannot resume in a fresh run")
         count = len(values["input_ids"])
         maximum = generation_budget(budget, count, config["runtime_context"])
@@ -371,7 +434,8 @@ def _generate_condition(
         )
         print("BEGIN", kind, budget, ident, flush=True)
         inputs = {
-            key: torch.tensor([value], device="cuda") for key, value in values.items()
+            key: torch.tensor([value], device=input_device)
+            for key, value in values.items()
         }
         start = time.monotonic()
         torch.cuda.reset_peak_memory_stats()
@@ -384,9 +448,11 @@ def _generate_condition(
             )
         full = tokens[0].tolist()
         assert full[:count] == values["input_ids"]
+        # 반환 토큰의 앞부분은 입력이다. 이후 생성 토큰만 Harmony 채점 대상으로 저장한다.
         generated = full[count:]
         eos = model.generation_config.eos_token_id
         eos = eos if isinstance(eos, list) else [eos]
+        # 자연 EOS 종료와 토큰 상한 소진을 구분해, 잘린 답변을 정상 종료로 오해하지 않게 한다.
         reason = (
             "native_eos"
             if generated and generated[-1] in eos
@@ -422,6 +488,7 @@ def _generate_condition(
                 "finished_at": now(),
             },
         )
+        # raw 저장이 끝난 표본만 완료 수에 더한다. 생성 중인 표본은 아직 완료가 아니다.
         completed += 1
         write(
             root / "progress.json",
@@ -441,6 +508,7 @@ def _generate_condition(
             flush=True,
         )
         if completed == 1 or completed % 10 == 0:
+            # 첫 결과와 10건 간격으로 CPU 채점을 갱신한다. 생성·sampling 설정은 바꾸지 않는다.
             subprocess.run(
                 [
                     str(REPO / config["scorer_python"]),
@@ -459,19 +527,17 @@ def _generate_condition(
     assert digest(adapter) == audit["adapter_sha256"]
 
 
-def run(config: dict[str, Any], root: Path, old: Path, config_path: Path) -> None:
-    """Wait for each spawned process to exit before starting the next condition.
-
-    This controller never imports CUDA. Completed conditions can be skipped, but
-    an interrupted condition requires a new experiment directory; native sampling
-    cannot be resumed with the same RNG trajectory after process termination.
-    """
+def condition_plan(
+    config: dict[str, Any], root: Path, old: Path
+) -> tuple[dict[str, Any], list[tuple[str, int | str]]]:
+    """Validate all frozen conditions before allocating any GPU worker."""
     if config.get("execution_protocol") != ISOLATION_PROTOCOL:
         raise ValueError(
             "Legacy results are read-only; use the fresh-process v2 config"
         )
     audit = verify_preparation(config, root, old)
     frozen = read(root / "frozen-inputs.json")
+    # 조건 하나는 모델 종류와 생성 상한의 조합이다. 같은 100건을 조건마다 반복한다.
     conditions = [(kind, cap) for kind in config["models"] for cap in config["budgets"]]
     if len(set(conditions)) != len(conditions):
         raise ValueError("Duplicate conditions")
@@ -480,13 +546,13 @@ def run(config: dict[str, Any], root: Path, old: Path, config_path: Path) -> Non
     ) * len(conditions):
         raise ValueError("Prepared cohort size differs from the experiment plan")
     receipts = root / "conditions"
-    receipts.mkdir(exist_ok=True)
-    # Preflight every condition before spending GPU time. Never adopt legacy raw files.
+    # GPU를 쓰기 전에 모든 조건을 확인한다. pending에는 아직 착수하지 않은 조건만 담는다.
     pending = []
     for kind, cap in conditions:
         receipt_path = receipts / f"{kind}-{cap}.json"
         paths = [root / "raw" / f"{kind}-{cap}-{ident}.json" for ident in frozen]
         if receipt_path.exists():
+            # 성공 receipt와 전체 raw가 있어야 완료 조건으로 인정하고 이번 실행에서 건너뛴다.
             receipt = read(receipt_path)
             if (
                 receipt.get("status") != "completed"
@@ -498,15 +564,28 @@ def run(config: dict[str, Any], root: Path, old: Path, config_path: Path) -> Non
                     "Interrupted condition: preserve it and use a new output directory"
                 )
         elif any(path.exists() for path in paths):
+            # 실행 근거가 없는 부분 raw를 새 결과에 섞으면 조건의 재현성을 확인할 수 없다.
             raise ValueError(
                 "Unattributed raw results cannot join the fresh-process experiment"
             )
         else:
+            # receipt와 raw가 모두 없는 조건만 새 worker에서 시작할 수 있다.
             pending.append((kind, cap))
+    return audit, pending
+
+
+def run(config: dict[str, Any], root: Path, old: Path, config_path: Path) -> None:
+    """Skip complete conditions; preserve interrupted native RNG trajectories."""
+    audit, pending = condition_plan(config, root, old)
+    frozen = read(root / "frozen-inputs.json")
+    receipts = root / "conditions"
+    receipts.mkdir(exist_ok=True)
+    # spawn으로 조건마다 새 Python·모델을 사용해 이전 조건의 모델 상태를 이어받지 않는다.
     context = multiprocessing.get_context("spawn")
     for kind, cap in pending:
+        # 완료 조건은 pending에서 제외됐다. 이 반복문은 미착수 조건만 순차 실행한다.
         receipt_path = receipts / f"{kind}-{cap}.json"
-        receipt = {
+        receipt: dict[str, Any] = {
             "model": kind,
             "budget": cap,
             "execution_protocol": ISOLATION_PROTOCOL,
@@ -534,6 +613,7 @@ def run(config: dict[str, Any], root: Path, old: Path, config_path: Path) -> Non
             worker.start()
             receipt.update(status="running", worker_pid=worker.pid)
             write(receipt_path, receipt)
+            # worker 종료 후 다음 조건을 시작한다. 생성에 별도 시간 상한은 추가하지 않는다.
             worker.join()  # No timeout or concurrent GPU worker.
         except BaseException:
             if worker.pid is not None:
@@ -547,6 +627,7 @@ def run(config: dict[str, Any], root: Path, old: Path, config_path: Path) -> Non
             raise
         exitcode = worker.exitcode
         worker.close()
+        # worker의 성공 종료와 전체 표본 raw 저장이 모두 확인돼야 조건을 완료 처리한다.
         complete = exitcode == 0 and all(
             (root / "raw" / f"{kind}-{cap}-{ident}.json").exists() for ident in frozen
         )
@@ -557,8 +638,7 @@ def run(config: dict[str, Any], root: Path, old: Path, config_path: Path) -> Non
         )
         write(receipt_path, receipt)
         if not complete:
-            # A failure can occur between the 10-case scoring checkpoints.
-            # Score the saved partial outputs before main() marks generation failed.
+            # 10건 채점 간격 사이에 실패해도, 이미 저장된 부분 raw는 채점해 보존한다.
             try:
                 subprocess.run(
                     [
@@ -571,11 +651,13 @@ def run(config: dict[str, Any], root: Path, old: Path, config_path: Path) -> Non
                     check=True,
                 )
             except Exception as score_error:
+                # 채점 오류는 추가 기록하고, 원 worker 실패 사유는 아래 예외로 유지한다.
                 receipt["partial_score_error"] = repr(score_error)
                 write(receipt_path, receipt)
             raise RuntimeError(
                 f"Condition {kind}/{cap} failed (exitcode={exitcode}); sweep stopped"
             )
+    # 모든 조건을 마친 뒤 계획 횟수와 최종 raw 개수가 일치하는지 확인한다.
     completed = len(list((root / "raw").glob("*.json")))
     assert completed == audit["planned_calls"]
     subprocess.run(
@@ -624,6 +706,7 @@ def score(config: dict[str, Any], root: Path, old: Path) -> None:
             for ident, expected in gold.items():
                 path = root / "raw" / f"{model}-{budget}-{ident}.json"
                 if not path.exists():
+                    # 아직 생성하지 않은 표본은 pending이다. 오분류·출력 무효로 채점하지 않는다.
                     continue
                 row = read(path)
                 if cache_policy(config) == "dynamic" and (
@@ -635,6 +718,7 @@ def score(config: dict[str, Any], root: Path, old: Path) -> None:
                 result = module.score_tokens(encoding, row["generated_ids"], expected)
                 i = 0 if expected["assessment"] == "present" else 1
                 parsed = result.get("parsed")
+                # semantic은 final 채널의 판단값을 읽는다. strict 계약 검사는 result에 따로 있다.
                 semantic_label = (
                     parsed.get("assessment")
                     if isinstance(parsed, dict) and result["final_channel_present"]

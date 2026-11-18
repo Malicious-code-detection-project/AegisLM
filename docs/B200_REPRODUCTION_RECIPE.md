@@ -530,3 +530,81 @@ base·adapter 평가 준비 완료·실제 생성0/1,200회다.
 이 레시피는 실행 절차와 프레임워크 후보 문서를 담당한다.
 원 실행 artifacts는 보존하며, 현재 training config의 초기 prepared 상태나 상속된2건 진단 계획을
 현재 평가 진행 상태로 읽지 않는다. 구체적인 기준 파일은 B200 표6절을 따른다.
+
+## 16. 자유 생성 평가를 한 명령으로 실행
+
+2026-10-10: A6000의 `run_cc_native_validation100.py`를 그대로 생성·채점에 사용하고,
+B200에 실행 관리 진입점 `scripts/b200/run-evaluation.sh`를 추가했다.
+프로젝트 루트에서 아래 명령을 사용한다. 가상환경은 실행 코드가 직접 선택한다.
+
+```bash
+# 입력·adapter 해시와 조건별 재개 가능 상태를 확인한다. GPU 생성은 하지 않는다.
+bash scripts/b200/run-evaluation.sh plan --run b200-ddp2-step100-v3
+
+# 서버 tmux에서 base → adapter → 최종 Harmony 채점까지 실행한다.
+bash scripts/b200/run-evaluation.sh start --run b200-ddp2-step100-v3
+
+# 필요할 때 현재 완료 수, 마지막 채점 결과, 종료 상태를 조회한다.
+bash scripts/b200/run-evaluation.sh status --run b200-ddp2-step100-v3
+
+# 실행 중단 요청. 이미 저장한 원 생성 결과는 보존한다.
+bash scripts/b200/run-evaluation.sh stop --run b200-ddp2-step100-v3
+```
+
+`start`는 B200에 설치된 tmux를 사용하므로 SSH가 끊겨도 계속 실행된다.
+전경 실행은 `start` 대신 `run`을 쓰고 Ctrl-C로 중단한다.
+평가는 A6000 원 절차처럼 base 먼저, adapter 다음이며 모델·상한마다 새 프로세스를 사용한다.
+현재 B200 평가 설정은 `model_device_map=balanced`, `model_gpu_count=2`다.
+각 모델을 GPU0·1에 분할 로딩해 두 장의 메모리를 함께 사용한다. base 전체 평가가 끝나면
+adapter를 같은 두 GPU에 분할 로딩한다. 학습의 DDP와 별개인 단일 프로세스 모델 분할이며 추가 학습은 없다.
+두 장을 보이게 하는 데 그치지 않고 실제 parameter가 cuda:0·cuda:1 모두에 배치됐는지 검사한다.
+단일 GPU 배치나 CPU offload이면 생성 전에 거부하며, 장치 배치와 GPU별 메모리를 runtime receipt에 기록한다.
+`--gpus 0,1`은 각 모델이 함께 사용할 두 GPU를 뜻한다.
+
+자동 진행 순서는 두 arm의 입력·adapter·완료 학습 검증 → Harmony 초기 채점 →
+base 600회 → adapter 600회 → 최종 채점·통합 요약이다.
+생성 중 기존 worker가 첫 결과와 이후 10건 간격으로 채점을 갱신한다.
+native sampling, medium reasoning, EOS, 동결 날짜·100건·6개 상한을 바꾸지 않고,
+외부 timeout·새 seed·final-prefill·추가 generate kwargs를 넣지 않는다.
+W&B·외부 알림·데이터 전송도 자동으로 켜지 않는다.
+
+한 arm에서 OOM이나 worker 실패가 나면 해당 arm의 나머지 조건과 다음 arm을 시작하지 않는다.
+종료된 worker·scorer의 프로세스 그룹을 정리한 후 저장된 raw 결과를 채점하고
+`failed` 또는 `interrupted` 상태와 원 종료 코드를 남긴다. 자동 재시도나 입력 제외는 하지 않는다.
+원 raw·오류 receipt는 보존하고 generation.log와 controller.log는 이어 쓴다.
+중복 실행은 controller lock과 기존 run lock으로 차단한다.
+
+완료 조건만 남은 실행은 같은 명령으로 재개할 수 있다. 성공 receipt가 있는 조건은 건너뛰고
+미착수 조건만 진행한다. **조건 도중 중단된 raw가 있으면 실행 전에 거부한다.**
+native sampling의 원 RNG 경로를 이어갈 수 없으므로, 부분 조건을 몰래 재생성하거나
+기존 결과와 합치지 않는다. 이 경우 실패 원인을 해결하고 새 실험 ID·config·출력 경로를 정한다.
+기존 9절의 중단 보존 기준을 따른다.
+
+| 위치 | 내용 |
+| --- | --- |
+| `outputs/b200-ddp2-step100-v3-evaluation/controller.log` | 전체 실행과 모델별 완료 수 |
+| 같은 폴더의 `preflight.log`, `state.json` | 시작 전 검증, 선택 장치·실행 소스 SHA·종료 코드 |
+| 같은 폴더의 `summary.json`, `summary.md` | base·adapter의 strict/semantic 행렬 통합 요약 |
+| 각 arm의 `generation.log`, `progress.json`, `conditions/`, `raw/` | 기존 원 실행·생성 결과·오류 |
+| 각 arm의 `confusion-matrices.json`, `.md` | 마지막 Harmony 채점 결과 |
+
+`status`는 쓰기와 GPU 할당 없이 현재 raw 개수와 마지막 채점 시각을 구분해 보여 준다.
+원천 라벨은 미검수이며, pending을 invalid·FN·TN으로 바꾸지 않는다.
+이 진입점 추가는 GPU 평가 완료나 품질 개선을 뜻하지 않는다.
+6절의 `run-eval.sh`는 과거 단일 GPU 준비 run용으로 유지한다.
+현재 DDP adapter의 개별 arm 실행 명령 `run-ddp-eval.sh base|adapter <training-run>`도
+새 실행 관리 코드로 연결되며, 완료 조건의 재개를 허용한다.
+
+
+이번 코드의 CPU 검증: 전체 회귀 테스트610개를 통과했고, 상태 요약 추가 후
+영향받는 실행 관리 테스트14개를 다시 통과했다. Ruff lint·format, mypy,
+bash 문법·실제 동결 설정 plan을 확인했다. GPU 생성은 시작하지 않았고 raw는 두 arm 모두0개다.
+입력 준비·모델 생성·Harmony 채점 함수는 변경 전후 AST가 같고 adapter SHA도 유지됐다.
+검증 로그는 `.private/b200-eval-implementation-20261010/validation/`에 보존한다.
+상태 전체 JSON이 필요하면 status 명령에 `--json`을 덧붙인다.
+
+
+2026-10-10 사용자 지시에 따라 잘못 시작한 단일 GPU 평가를 중단하고 생성38건 및 관련 평가 기록을 삭제했다.
+동결 입력과 학습 adapter는 유지하고 모델 로딩만 두 GPU 분할로 변경했다. 기존 sampling·EOS·상한과
+base → adapter 순서는 유지한다. 위610개 CPU 검사와 생성 함수 AST 동일 기록은 초기 구현 당시의 기록이며,
+이번 로딩 변경의 검증은 `.private/b200-model-parallel-20261010/`에 별도로 남긴다.
