@@ -155,6 +155,7 @@ def test_b200_smoke_configs_use_model_artifact_root():
         assert "output_dir: model/adapters/" in text
         assert "logging_dir: model/runs/" in text
 
+
 def test_b200_smoke_configs_use_expected_deepspeed_profiles():
     """FP8 and non-FP8 smoke configs intentionally use different DS profiles."""
     fp8_text = Path(
@@ -168,6 +169,7 @@ def test_b200_smoke_configs_use_expected_deepspeed_profiles():
     assert "fp8: true" in fp8_text
     assert "fp8_backend: torchao" in fp8_text
     assert "deepspeed: configs/deepspeed/ds_z3_b200.json" in non_fp8_text
+
 
 def test_qwen3_coder_next_full_config_uses_full_dataset_and_artifact_root():
     """Qwen3-Coder-Next is the first active full-size training target."""

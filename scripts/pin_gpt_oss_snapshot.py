@@ -1,4 +1,5 @@
 """Verify official pinned HF snapshot bytes and write a local attestation."""
+
 from __future__ import annotations
 
 import hashlib
@@ -18,7 +19,10 @@ def main() -> None:
     files = {}
     for item in info.siblings:
         name = item.rfilename
-        if "/" in name or not (name.endswith((".json", ".jinja", ".safetensors")) or name in ("LICENSE", "USAGE_POLICY")):
+        if "/" in name or not (
+            name.endswith((".json", ".jinja", ".safetensors"))
+            or name in ("LICENSE", "USAGE_POLICY")
+        ):
             continue
         path = ROOT / name
         size = path.stat().st_size
@@ -38,8 +42,23 @@ def main() -> None:
     if len(files) != 12:
         raise ValueError("unexpected pinned snapshot file set")
     result = ROOT / "pilot_snapshot_attestation.json"
-    result.write_text(json.dumps({"repo_id": REPO, "revision": REVISION, "verified_against": "HF pinned commit blob/LFS hashes", "files": files}, indent=2) + "\n")
-    print("ATTESTATION_SHA256", hashlib.sha256(result.read_bytes()).hexdigest(), flush=True)
+    result.write_text(
+        json.dumps(
+            {
+                "repo_id": REPO,
+                "revision": REVISION,
+                "verified_against": "HF pinned commit blob/LFS hashes",
+                "files": files,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    print(
+        "ATTESTATION_SHA256",
+        hashlib.sha256(result.read_bytes()).hexdigest(),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

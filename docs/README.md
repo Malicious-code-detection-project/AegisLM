@@ -58,7 +58,6 @@
 | --- | --- |
 | [LLAMA_FACTORY_B200_WANDB.md](LLAMA_FACTORY_B200_WANDB.md) | B200 멀티 GPU LLaMA-Factory 실행, DeepSpeed ZeRO-3, W&B 로깅 절차 |
 | [B200_QWEN3_480B_MEMORY_PROCESS.md](B200_QWEN3_480B_MEMORY_PROCESS.md) | Qwen3-Coder 480B FP8 smoke 학습의 cgroup memory limit 원인 분석, observe-only telemetry, 팀 실행 체크리스트 |
-| [MODEL_LIMIT_PROBES.md](MODEL_LIMIT_PROBES.md) | B200 800GiB container profile에서 후보 모델 load-only 한계를 측정하는 manifest, CLI, telemetry 절차 |
 | [FULL_SIZE_TRAINING_QUEUE.md](FULL_SIZE_TRAINING_QUEUE.md) | Full dataset training queue after retiring Qwen2/72B from the active run order |
 | [DEEPSPEED_ZERO3_DTYPE_MISMATCH.md](DEEPSPEED_ZERO3_DTYPE_MISMATCH.md) | DeepSpeed 0.19.2 ZeRO-3 + PEFT LoRA + bf16 dtype mismatch 분석과 ZeRO-2 diagnostic 절차 |
 
