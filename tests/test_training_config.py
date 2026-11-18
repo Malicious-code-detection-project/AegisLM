@@ -1,8 +1,9 @@
+from pathlib import Path
 import os
 import json
-from pathlib import Path
-
 import pytest
+from aegislm.training import config as training_config
+from aegislm import paths as path_policy
 from aegislm.training.config import load_config, validate_paths
 
 # A valid mock config structure for testing
@@ -56,6 +57,16 @@ def test_load_config_invalid_json(tmp_path):
     with pytest.raises(ValueError) as excinfo:
         load_config(str(config_file))
     assert "Invalid JSON format" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("numeric", ["NaN", "Infinity", "1e999"])
+def test_load_config_rejects_nonfinite_numbers(tmp_path, numeric):
+    config_file = tmp_path / "nonfinite.json"
+    payload = json.dumps(VALID_CONFIG_DATA).replace("0.0002", numeric)
+    config_file.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="non-finite|non-standard"):
+        load_config(str(config_file))
 
 
 def test_validate_paths_missing_dataset():
@@ -115,6 +126,22 @@ def test_validate_paths_git_policy_violation():
     assert "Path violation" in str(excinfo.value)
 
 
+def test_git_safe_path_resolves_ignored_directory_symlinks(tmp_path, monkeypatch):
+    repository = tmp_path / "repository"
+    module_path = repository / "aegislm" / "training" / "config.py"
+    module_path.parent.mkdir(parents=True)
+    module_path.touch()
+    docs = repository / "docs"
+    docs.mkdir()
+    outputs = repository / "outputs"
+    outputs.mkdir()
+    (outputs / "escape").symlink_to(docs, target_is_directory=True)
+    policy_path = repository / "aegislm" / "paths.py"
+    monkeypatch.setattr(path_policy, "__file__", str(policy_path))
+
+    assert not training_config.is_git_safe_path(str(outputs / "escape" / "raw"))
+
+
 def test_b200_smoke_configs_use_model_artifact_root():
     """B200 LLaMA-Factory configs should keep artifacts under model/."""
     common_config_paths = [
@@ -127,7 +154,6 @@ def test_b200_smoke_configs_use_model_artifact_root():
         assert "model_name_or_path: model/base/" in text
         assert "output_dir: model/adapters/" in text
         assert "logging_dir: model/runs/" in text
-
 
 def test_b200_smoke_configs_use_expected_deepspeed_profiles():
     """FP8 and non-FP8 smoke configs intentionally use different DS profiles."""
@@ -142,7 +168,6 @@ def test_b200_smoke_configs_use_expected_deepspeed_profiles():
     assert "fp8: true" in fp8_text
     assert "fp8_backend: torchao" in fp8_text
     assert "deepspeed: configs/deepspeed/ds_z3_b200.json" in non_fp8_text
-
 
 def test_qwen3_coder_next_full_config_uses_full_dataset_and_artifact_root():
     """Qwen3-Coder-Next is the first active full-size training target."""

@@ -5,17 +5,20 @@ description = "LLM fine-tuning and model development project for security analys
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "datasets>=2.16.0,<=4.0.0",
-    "hf-transfer>=0.1.9,<1",
-    "huggingface-hub>=1,<2",
     "jsonschema>=4,<5",
-    "torchao>=0.15.0",
-    "transformers>=4.55.0,<=5.6.0,!=4.57.0",
-    "wandb>=0.28.0",
+    "python-dotenv==1.2.3",
+    "wandb==0.30.0",
 ]
 keywords = ["llm", "fine-tuning", "security", "malware-analysis", "model-development"]
 
 [dependency-groups]
+data-prep = [
+    "duckdb==1.4.1",
+    "pyarrow==21.0.0",
+    "tree-sitter==0.25.2",
+    "tree-sitter-c==0.24.1",
+    "tree-sitter-cpp==0.23.4",
+]
 dev = [
     "mypy>=2.1.0",
     "pytest>=9.1.0",
@@ -23,37 +26,25 @@ dev = [
     "types-jsonschema>=4.26.0.20260518",
 ]
 training = [
-    "accelerate>=1.3.0,<=1.11.0",
-    "deepspeed>=0.19.2,<0.20",
-    "llamafactory",
-    "peft>=0.18.0,<=0.18.1",
-    "trl>=0.18.0,<=0.24.0",
+    "accelerate==1.14.0",
+    "bitsandbytes==0.49.2",
+    "datasets==4.3.0",
+    "peft==0.19.1",
+    "safetensors==0.8.0",
+    "torch==2.10.0",
+    "transformers==5.5.0",
+    "trl==0.24.0",
+    "unsloth==2026.6.9",
+    "unsloth-zoo==2026.6.7",
 ]
 
-[tool.uv.sources]
-llamafactory = { path = "LLaMA-Factory", editable = true }
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
 [tool.ruff]
-exclude = [
-    ".venv",
-    "LLaMA-Factory",
-    "data",
-    "model",
-    "raw_datasets",
-    "artifacts",
-    "checkpoints",
-    "adapters",
-    "models",
-    "outputs",
-    "saves",
-    "runs",
-    "wandb",
-    "mlruns",
-    "unsloth_compiled_cache",
-]
+# Historical tutorial/observer source is hash- and AST-checked during reproduction.
+extend-exclude = ["scripts/b200/reference"]
 
 [tool.mypy]
 python_version = "3.12"

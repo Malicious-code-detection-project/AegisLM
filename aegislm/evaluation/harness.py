@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import html
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from aegislm.artifacts import (
+    DEFAULT_JSONL_MAX_BYTES,
+    DEFAULT_JSONL_MAX_LINE_BYTES,
+    DEFAULT_JSONL_MAX_RECORDS,
+    load_bounded_jsonl_objects,
+    strict_json_loads,
+    write_text_artifact,
+)
 from aegislm.evaluation.validation import parse_model_output, validate_model_output
 
 JSON_CONTRACT_WEIGHT = 35.0
@@ -42,6 +51,9 @@ class Prediction:
     model_id: str
     run_id: str
     raw_output: str
+    raw_generation: str | None = None
+    generation: dict[str, Any] | None = None
+    predictions_sha256: str | None = None
     latency_ms: float | None = None
     generated_at: str | None = None
     metadata: dict[str, Any] | None = None
@@ -49,16 +61,26 @@ class Prediction:
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     """Load a JSONL file into dictionaries."""
+    rows, _digest = load_bounded_jsonl_objects(
+        path,
+        description="evaluation JSONL",
+        max_bytes=DEFAULT_JSONL_MAX_BYTES,
+        max_line_bytes=DEFAULT_JSONL_MAX_LINE_BYTES,
+        max_records=DEFAULT_JSONL_MAX_RECORDS,
+    )
+    return rows
+
+
+def _parse_jsonl_text(path: Path, text: str) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    for line_number, line in enumerate(
-        path.read_text(encoding="utf-8").splitlines(), 1
-    ):
+    for line_number, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
         try:
-            item = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"{path}:{line_number}: invalid JSONL: {exc.msg}") from exc
+            item = strict_json_loads(line)
+        except (json.JSONDecodeError, ValueError) as exc:
+            reason = exc.msg if isinstance(exc, json.JSONDecodeError) else str(exc)
+            raise ValueError(f"{path}:{line_number}: invalid JSONL: {reason}") from exc
         if not isinstance(item, dict):
             raise ValueError(f"{path}:{line_number}: JSONL item must be an object")
         records.append(item)
@@ -67,14 +89,24 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def load_predictions(path: Path) -> list[Prediction]:
     """Load prediction JSONL records."""
+    rows, predictions_sha256 = load_bounded_jsonl_objects(
+        path,
+        description="prediction JSONL",
+        max_bytes=DEFAULT_JSONL_MAX_BYTES,
+        max_line_bytes=DEFAULT_JSONL_MAX_LINE_BYTES,
+        max_records=DEFAULT_JSONL_MAX_RECORDS,
+    )
     predictions: list[Prediction] = []
-    for item in load_jsonl(path):
+    for item in rows:
         predictions.append(
             Prediction(
                 record_id=_required_string(item, "record_id"),
                 model_id=_required_string(item, "model_id"),
                 run_id=_required_string(item, "run_id"),
-                raw_output=_required_string(item, "raw_output"),
+                raw_output=_string(item, "raw_output"),
+                raw_generation=_optional_string(item.get("raw_generation")),
+                generation=_optional_dict(item.get("generation")),
+                predictions_sha256=predictions_sha256,
                 latency_ms=_optional_number(item.get("latency_ms")),
                 generated_at=_optional_string(item.get("generated_at")),
                 metadata=_optional_dict(item.get("metadata")),
@@ -108,16 +140,15 @@ def evaluate_predictions(
 
 def write_summary_json(summary: dict[str, Any], path: Path) -> None:
     """Write the machine-readable evaluation summary."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
+    write_text_artifact(
+        path,
+        json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
+        idempotent=True,
     )
 
 
 def write_report_html(summary: dict[str, Any], path: Path) -> None:
     """Write a static HTML report for human review."""
-    path.parent.mkdir(parents=True, exist_ok=True)
     metrics = summary["metrics"]
     rows = "\n".join(_case_row(case) for case in summary["cases"])
     body = f"""<!doctype html>
@@ -172,7 +203,7 @@ def write_report_html(summary: dict[str, Any], path: Path) -> None:
 </body>
 </html>
 """
-    path.write_text(body, encoding="utf-8")
+    write_text_artifact(path, body, idempotent=True)
 
 
 def _evaluate_one(
@@ -420,6 +451,13 @@ def _required_string(item: dict[str, Any], key: str) -> str:
     return value
 
 
+def _string(item: dict[str, Any], key: str) -> str:
+    value = item.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"prediction.{key} must be a string")
+    return value
+
+
 def _optional_string(value: Any) -> str | None:
     if value is None:
         return None
@@ -431,8 +469,12 @@ def _optional_string(value: Any) -> str | None:
 def _optional_number(value: Any) -> float | None:
     if value is None:
         return None
-    if not isinstance(value, int | float):
-        raise ValueError("latency_ms must be a number")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(float(value))
+    ):
+        raise ValueError("latency_ms must be a finite number")
     return float(value)
 
 

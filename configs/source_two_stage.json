@@ -1,0 +1,25 @@
+{
+  "recipe": "source_two_stage_v1",
+  "model": {
+    "base_model_id": "openai/gpt-oss-20b",
+    "runtime_model_id": "unsloth/gpt-oss-20b-unsloth-bnb-4bit",
+    "revision": "093fba6992ef5a7152481afec0bdfca1ac486998",
+    "cache_dir": "models/cache"
+  },
+  "dataset_dir": "data/processed",
+  "output_dir": "outputs/source-two-stage-20260928-v1",
+  "adapter_dir": "adapters/source-two-stage-20260928-v1",
+  "checkpoint_dir": "checkpoints/source-two-stage-20260928-v1",
+  "training": {
+    "max_seq_length": 4096,
+    "batch_size": 1,
+    "gradient_accumulation_steps": 32,
+    "max_steps": 100,
+    "learning_rate": 0.0001,
+    "warmup_ratio": 0.1,
+    "lora_r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.05,
+    "seed": 3407
+  }
+}

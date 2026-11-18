@@ -12,27 +12,22 @@ wheels/
 # Virtual environments
 .venv/
 
-# Local checkout installed separately on the GPU server
-LLaMA-Factory/
-
 # Local environment and secrets
 .env
 .env.*
 !.env.example
 
 # Local datasets and model artifacts
-data
 data/
-model
-model/
 raw_datasets/
 artifacts/
 checkpoints/
 adapters/
-model_artifacts/
+# Harness runtime documentation is source, not model adapters.
+!references/이정민/harness/adapters/
+!references/이정민/harness/adapters/runtime.md
 models/
 outputs/
-saves/
 runs/
 wandb/
 mlruns/
@@ -44,3 +39,35 @@ experiments/*
 
 # OS/editor files
 .DS_Store
+
+# Personal harness: local-only runtime state
+/.active-profile
+/.harness-local/
+/.codex/agents/*.toml
+
+# Machine-private files and root storage symlinks must stay out of Git.
+/.private/
+/.local/
+/.secrets/
+.ssh/
+*.pem
+*.key
+*.ppk
+id_rsa
+id_ed25519
+/data
+/model
+/artifact
+/outputs
+/Data
+/Model
+/TrainingArtifacts
+
+# From the B200 server 07-01 copy (LLaMA-Factory line)
+# Local checkout installed separately on the GPU server
+LLaMA-Factory/
+data
+model
+model/
+model_artifacts/
+saves/

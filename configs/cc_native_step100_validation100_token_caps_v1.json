@@ -1,0 +1,16 @@
+{
+  "experiment_id": "cc-native-step100-validation100-token-caps-20261005-v1",
+  "output_dir": "outputs/cc-native-step100-validation100-token-caps-20261005-v1",
+  "training_reference": "outputs/cc-official-tutorial-v5-max-steps-100-20261004-v1",
+  "selection_reference": "outputs/cc-native-forward-diagnostic-20261005-v1/probe-inputs.json",
+  "samples_per_condition": 100,
+  "budgets": [128, 512, 2048, 65536, 130000, "context-minus-input"],
+  "models": ["adapter", "base"],
+  "runtime_context": 131072,
+  "prompt_template_date": "2026-10-04",
+  "scorer_python": "experiments/cc-official-tutorial-v5-score/.venv/bin/python",
+  "extra_generate_kwargs": {},
+  "external_timeout": null,
+  "new_training_steps": 0,
+  "test_used": false
+}

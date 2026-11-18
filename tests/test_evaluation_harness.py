@@ -3,6 +3,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
+
 from aegislm.evaluation import (
     Prediction,
     evaluate_predictions,
@@ -60,6 +62,66 @@ def test_invalid_json_is_reported_as_parse_failure() -> None:
     assert not case["hard_gate_pass"]
     assert not case["json_parse_success"]
     assert any("invalid JSON" in error for error in case["errors"])
+
+
+def test_empty_raw_output_loads_and_scores_as_parse_failure(tmp_path) -> None:
+    records = load_records()[:1]
+    path = tmp_path / "predictions.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "record_id": str(records[0]["id"]),
+                "model_id": "unit-test-model",
+                "run_id": "unit-test-run",
+                "raw_output": "",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    predictions = load_predictions(path)
+    summary = evaluate_predictions(records, predictions)
+
+    assert predictions[0].raw_output == ""
+    assert summary["metrics"]["json_parse_success_rate"] == 0.0
+    assert summary["cases"][0]["hard_gate_pass"] is False
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity", "1e999"])
+def test_nonfinite_json_is_reported_as_parse_failure(constant: str) -> None:
+    records = load_records()
+    prediction = Prediction(
+        record_id=str(records[0]["id"]),
+        model_id="unit-test-model",
+        run_id="unit-test-run",
+        raw_output=f'{{"summary": {constant}}}',
+    )
+
+    summary = evaluate_predictions(records, [prediction])
+
+    assert summary["metrics"]["json_parse_success_rate"] == 0.0
+    assert "invalid JSON" in summary["cases"][0]["errors"][0]
+
+
+def test_deeply_nested_json_is_a_case_failure_and_batch_continues() -> None:
+    records = load_records()[:2]
+    nested = '{"x":' + "[" * 1_200 + "0" + "]" * 1_200 + "}"
+    predictions = [
+        Prediction(
+            record_id=str(records[0]["id"]),
+            model_id="unit-test-model",
+            run_id="unit-test-run",
+            raw_output=nested,
+        ),
+        prediction_for(records[1], cast(dict[str, Any], records[1]["expected_output"])),
+    ]
+
+    summary = evaluate_predictions(records, predictions)
+
+    assert summary["metrics"]["total_count"] == 2
+    assert summary["cases"][0]["json_parse_success"] is False
+    assert summary["cases"][1]["json_parse_success"] is True
 
 
 def test_unsafe_guidance_fails_safety_gate() -> None:

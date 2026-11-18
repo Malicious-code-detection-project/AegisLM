@@ -13,6 +13,7 @@ import pytest
         "aegislm.evaluation.validation",
         "aegislm.inference",
         "aegislm.inference.baseline",
+        "aegislm.inference.adapter",
         "aegislm.prompts",
         "aegislm.schemas",
         "aegislm.training",

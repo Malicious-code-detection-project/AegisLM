@@ -1,0 +1,39 @@
+{
+  "recipe": "cc_decision_v1",
+  "model": {
+    "base_model_id": "openai/gpt-oss-20b",
+    "runtime_model_id": "unsloth/gpt-oss-20b-unsloth-bnb-4bit",
+    "revision": "093fba6992ef5a7152481afec0bdfca1ac486998",
+    "cache_dir": "models/cache"
+  },
+  "dataset": {
+    "root": "data/processed/cc-source-candidates-20260928-v5",
+    "manifest_sha256": "51db4812e9291a184d87818622ed8a5fc68542e75b9798cb36face961794c8f5",
+    "inventory_sha256": "ba729bf8e839d7ee4f90ad0ea0014d21f1dec1805ae936183c3bb901d2ff0d7e"
+  },
+  "allow_unreviewed_source_labels": true,
+  "protocol": {
+    "template_date": "2026-10-02",
+    "reasoning_effort": "low",
+    "max_new_tokens": 128
+  },
+  "output_dir": "outputs/cc-decision-20261002-v7",
+  "adapter_dir": "adapters/cc-decision-20261002-v7",
+  "checkpoint_dir": "checkpoints/cc-decision-20261002-v7",
+  "training": {
+    "max_seq_length": 4096,
+    "batch_size": 1,
+    "gradient_accumulation_steps": 32,
+    "max_steps": 100,
+    "learning_rate": 0.0001,
+    "warmup_ratio": 0.1,
+    "lora_r": 8,
+    "lora_alpha": 16,
+    "lora_dropout": 0.05,
+    "seed": 3407
+  },
+  "readiness": {
+    "policy": "batch1_training_and_reload_v1",
+    "training_diagnostic": "outputs/cc-unsloth-runtime-20261002-v5"
+  }
+}

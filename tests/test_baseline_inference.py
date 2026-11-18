@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from aegislm.evaluation import load_predictions
 from aegislm.inference import make_static_response_generator, run_baseline_inference
 from aegislm.prompts import PromptMessage
@@ -61,6 +63,34 @@ def test_generator_receives_formatted_prompt_messages(tmp_path: Path) -> None:
         "Record ID: fixture-kev-deserialization-001"
         in observed_messages[0][1]["content"]
     )
+
+
+def test_baseline_inference_refuses_alias_or_existing_output(tmp_path: Path) -> None:
+    dataset = tmp_path / "dataset.jsonl"
+    original = FIXTURE_PATH.read_bytes()
+    dataset.write_bytes(original)
+
+    with pytest.raises((FileExistsError, ValueError)):
+        run_baseline_inference(
+            dataset_path=dataset,
+            predictions_path=dataset,
+            model_id="unit-test-model",
+            run_id="unit-test-run",
+            generate_response=make_static_response_generator("{}"),
+        )
+    assert dataset.read_bytes() == original
+
+    output = tmp_path / "existing.jsonl"
+    output.write_text("preserved\n", encoding="utf-8")
+    with pytest.raises(FileExistsError):
+        run_baseline_inference(
+            dataset_path=dataset,
+            predictions_path=output,
+            model_id="unit-test-model",
+            run_id="unit-test-run",
+            generate_response=make_static_response_generator("{}"),
+        )
+    assert output.read_text(encoding="utf-8") == "preserved\n"
 
 
 def test_cli_mock_backend_writes_prediction_contract(tmp_path: Path) -> None:

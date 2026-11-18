@@ -1,7 +1,10 @@
 import json
+import math
 import os
 from typing import Any, Dict
 from jsonschema import validate, ValidationError
+
+from aegislm.paths import is_git_safe_path
 
 # Define the config JSON schema to ensure strict type and field compliance
 CONFIG_SCHEMA = {
@@ -64,9 +67,10 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
     with open(config_path, "r", encoding="utf-8") as f:
         try:
-            config = json.load(f)
-        except json.JSONDecodeError as e:
+            config = json.load(f, parse_constant=_reject_json_constant)
+        except (json.JSONDecodeError, ValueError) as e:
             raise ValueError(f"Invalid JSON format in config file: {e}")
+    _reject_nonfinite_numbers(config)
 
     # Schema validation using jsonschema
     try:
@@ -77,39 +81,19 @@ def load_config(config_path: str) -> Dict[str, Any]:
     return config
 
 
-def is_git_safe_path(path: str) -> bool:
-    """
-    Checks if the path is Git-safe (either outside the git repository or in an ignored directory).
-    Allowed ignored directories are defined based on the project's .gitignore policy.
-    """
-    abs_path = os.path.abspath(path)
-    # The workspace root is the parent of 'aegislm' package
-    workspace_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON constant is forbidden: {value}")
 
-    # If the path is outside the git repository, it's naturally Git-safe
-    if not abs_path.startswith(workspace_root):
-        return True
 
-    # Get relative path from workspace root
-    rel_path = os.path.relpath(abs_path, workspace_root)
-    top_dir = rel_path.split(os.sep)[0]
-
-    # Allowed directories from .gitignore
-    allowed_ignored_dirs = {
-        "data",
-        "raw_datasets",
-        "artifacts",
-        "checkpoints",
-        "adapters",
-        "models",
-        "outputs",
-        "runs",
-        "experiments",
-    }
-
-    return top_dir in allowed_ignored_dirs
+def _reject_nonfinite_numbers(value: Any, path: str = "config") -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"{path} contains a non-finite number")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _reject_nonfinite_numbers(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _reject_nonfinite_numbers(item, f"{path}[{index}]")
 
 
 def validate_paths(

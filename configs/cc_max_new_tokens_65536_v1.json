@@ -1,0 +1,16 @@
+{
+  "recipe": "cc_max_new_tokens_65536_v1",
+  "experiment_id": "cc-max-new-tokens-65536-20261003-v1",
+  "title": "max-new-tokens-65536 (context-window-131072)",
+  "changed_parameter": "max_new_tokens",
+  "reference_value": 128,
+  "target_value": 65536,
+  "source_config": "configs/cc_source_decision_v5.json",
+  "source_config_sha256": "110556faff331fdf30f9205b8b793c0ff37e7ea112958ddb4310dd2ba2c4918c",
+  "output_dir": "outputs/cc-max-new-tokens-65536-20261003-v1",
+  "budgets": [128, 512, 2048, 65536],
+  "sample_count": 2,
+  "model_kinds": ["base", "adapter"],
+  "runtime_context_length": 131072,
+  "max_time_seconds": 300
+}
