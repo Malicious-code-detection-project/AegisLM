@@ -1,0 +1,38 @@
+{
+  "sources": [
+    {
+      "hardware": "B200",
+      "cache": "static",
+      "path": "outputs/b200-ddp2-step100-v3-base-validation100/confusion-matrices.json"
+    },
+    {
+      "hardware": "B200",
+      "cache": "static",
+      "path": "outputs/b200-ddp2-step100-v3-adapter-validation100/confusion-matrices.json"
+    },
+    {
+      "hardware": "B200",
+      "cache": "dynamic",
+      "path": "outputs/b200-ddp2-step100-v3-dynamic-base-validation100/confusion-matrices.json"
+    },
+    {
+      "hardware": "B200",
+      "cache": "dynamic",
+      "path": "outputs/b200-ddp2-step100-v3-dynamic-adapter-validation100/confusion-matrices.json"
+    }
+  ],
+  "references": [
+    "docs/results/a6000-cache-reference-20261010.json"
+  ],
+  "notes": [
+    "같은 validation100을 상한별로 반복한다. 600개 독립 표본으로 합산하지 않는다.",
+    "장비 × 캐시 × base/adapter × 생성 상한 × strict/semantic으로 분리한다.",
+    "A6000 값은 지정 커밋의 문서 집계이며 원본 JSON 재검증 전이다. static base 지표는 미확인이다.",
+    "B200 native는 Unsloth 기본 정적 경로이다. 현재 실행에서 실제 캐시 클래스는 계측하지 않았다. dynamic은 DynamicCache 관측을 강제한다.",
+    "동일 장비 내 캐시 비교는 같은 adapter·입력·설정이다. A6000/B200 adapter 학습 이력이 달라 장비 효과로 단정할 수 없다.",
+    "샘플링 난수 흐름은 기존 방식을 유지한다. 한 번의 차이를 캐시의 인과 효과로 단정하지 않는다.",
+    "OOM·미실행은 pending, 형식 오류는 invalid, 판단 유보는 uncertain으로 구분한다.",
+    "부분 완료 조건은 공통 완료 ID를 확보하기 전 직접 순위 비교하지 않는다.",
+    "GPU 메모리 상한의 충분성은 실제 긴 상한 완료로 확인한다. 큰 VRAM만으로 성공을 보장하지 않는다."
+  ]
+}

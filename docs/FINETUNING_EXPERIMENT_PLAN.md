@@ -1,5 +1,201 @@
 # GPT-OSS-20B Fine-Tuning Experiment Plan
 
+## 2026-10-14-context-evidence-results
+
+### 후보 7건의 C/C++ 정적 분석·호출 문맥 검토 결과
+
+현재 상태: B200 CPU에서 Cppcheck 2.18.0과 고정 원천 소스로 7건을 분석했다.
+호출 문맥을 포함한 검토에서 **2건은 잠정 양성 근거를 확보했고 5건은 보류**했다.
+이번 설정에서 요청 CWE를 직접 뒷받침하는 자동 경고는 0/7이었다.
+2건의 근거는 자동 탐지가 아니라 함수 간 소스 검토에서 얻었다. 경고 부재를 안전으로 해석하지 않는다.
+
+| 대상 | 추가 문맥으로 확인한 내용 | 확장 범위의 잠정 검토 |
+| --- | --- | --- |
+| `rose_start_idletimer` | 참조 획득 없는 timer 등록, 실행 중 callback을 기다리지 않는 `del_timer`, `sock_put` 해제 및 callback의 socket 접근 | CWE-416 양성 근거 확보; idle callback 자체 runtime 재현 없음 |
+| `kg_unseal_iov_token` | v1 callee의 14바이트 검사 후 checksum 8바이트 추가 사용; 전체 길이 검사는 뒤에 위치 | CWE-125 양성 근거 확보; 유효한 GSS context·v1/RC4·잘린 header 조건, runtime 재현 없음 |
+| `swabHorAcc32` | callee의 stride/cc 조건과 조건부 범위 초과 계산 | 보류: 실제 codec 진입 조건·버퍼 크기 연결 필요 |
+| `PredictorDecodeRow` | scanline 크기 산출과 decode 함수 포인터의 대상 | 보류: 정상 배수 관계와 YCbCr 등 특수 조건 구분 필요 |
+| `PredictorEncodeRow` | scanline 크기 전달과 encode 함수 포인터의 대상 | 보류: 특수 입력에서 할당 범위 초과하는 경로 확인 필요 |
+| `process_destblt` | 읽기 macro와 caller에 남은 메시지 길이 검사가 없는 분기 | 보류: 상위 수신 경로·실제 할당 경계와 연결 필요 |
+| `SampleTable::isValid` | 빈 table과 미설정 상태를 vector 비어 있음으로 구분하는 설계 | 보류: 보안 영향과 입력 검증 오류의 관계 확인 필요 |
+
+**보존 범위:** 원 라벨, 기존 검증 라벨 68/32 분류, 20B 원 출력·성능 수치는 변경하지 않았다.
+새 판단은 입력 범위가 다른 별도 잠정 sidecar다. 기존 예측으로 새 범위의 confusion matrix를 계산하지 않는다.
+모델 출력은 라벨 근거로 쓰지 않았고 독립 검토·실제 취약점 재현은 수행하지 않았다.
+
+**실행 근거:** Cppcheck revision `bd62c8ca7be207583c60002a5af50e5f1d12660b`.
+기존 검수의 주 소스 파일 5개 SHA256 일치 확인. libtiff 초기 매크로 설정 오류를 보존하고,
+CMake에서 compile_commands를 생성해 후속 검사에서 `unknownMacro`를 제거했다.
+libtiff 외에는 수동 include 경로를 사용했다. krb5 설정 header와 Linux/Android 프로젝트 header가
+불완전하고 krb5 설정 탐색에 상한이 있으므로 전체 빌드 경로를 검사했다고 주장하지 않는다.
+표준 C header의 누락 자체와 프로젝트 정의의 누락은 구분한다.
+선택한 후속 분석 6회는 timeout 없이 완료됐으며 종료 코드 2는 설정된 진단 발생 코드다.
+libtiff의 `zerodivcond`는 요청 CWE-119 직접 경고로 세지 않는다.
+
+**후속 설계:** A=원 대상 코드, C=A+고정 호출 문맥, B=C+실제 도구 진단을 구분한다.
+진단이 없는 사례에는 빈 진단을 유지한다. 도구 경고를 만들거나 수동 판단을 자동 경고처럼 넣지 않는다.
+원천 패치·CVE·검토 결론은 reviewer 전용이다. packet의 토큰 예산, 최종 범위, 새 gold를 동결한 후
+별도 모델 비교를 진행한다. 현재 A/B/C 모델 호출은 0건이며 이 소규모 선별 표본으로 분석기 recall을 추정하지 않는다.
+
+원본 XML·명령·receipt·소스 hash·문맥 packet·검토 JSON·HTML은 Git 제외 경로
+`.private/b200-context-evidence-20261014/`에 보존한다. 주요 파일은
+`context-evidence-report.html`, `context-review.json`, `expanded-scope-review.jsonl`,
+`review-validation.json`, `analysis-raw-evidence.tar.gz`이다.
+
+
+## 2026-10-14-context-evidence-plan
+
+## 선행 계획 이력 — 정적 분석 근거·호출 문맥 비교 (2026-10-14)
+
+### 목적과 현재 상태
+
+사용자는 보안 분석의 **첫 거름망으로 정적 분석 도구를 사용하고 그 근거를 LLM이 해석하도록 하는 운영 목적**을 확인했다.
+따라서 코드 단독 CWE 판단뿐 아니라 정적 신호·문맥이 제공됐을 때의 판단도 평가한다.
+아래는 근거 수집 이전의 계획 이력이다. 당시에는 후보 선별만 완료했고 도구·문맥·모델 실행 전이었다. 현재 실행 결과와 미완료 범위는 위 결과 절에서 관리한다.
+기존 20B 실험·라벨 68/32 분류·원 예측·5개 모델 비교 기록은 유지한다.
+
+### Nurilab 구현을 확인한 결과
+
+검토 저장소: [project_Nurilab](https://github.com/Malicious-code-detection-project/project_Nurilab/tree/6abe1b2dc60167d0993d83782e97fcdec20a416c),
+고정 revision `6abe1b2dc60167d0993d83782e97fcdec20a416c`. 문서뿐 아니라 분석기·입력 수집·schema·prompt·pipeline 코드를 읽었다.
+
+| 항목 | 현재 코드에서 확인한 계약 | 이번 실험에 미치는 영향 |
+| --- | --- | --- |
+| 기본 분석 | Python AST 위험 호출, secret 패턴, 선택적 `ruff check --output-format json` | 보류 32건은 C/C++이므로 이 분석기를 그대로 적용할 수 없음 |
+| 분석 결과 | PythonAnalysis의 suspicious_calls, secrets, ruff_findings; RuffFinding은 file/line/column/rule_id/message/severity/source | 원 결과와 정규화 결과의 ID·위치를 연결해 보존 |
+| Local LLM 입력 | 정규화된 정적 신호만 전달; 원본 코드 없음. 입력 budget에 따라 신호를 정렬·축소하고 truncation 기록 | 요청한 코드+근거 비교는 현 제품 계약과 다른 연구용 확장 조건 |
+| Local LLM 출력 | summary, risk_level, findings. low/medium/high는 CWE 이진 라벨이 아님 | 제품 review 지표와 AegisLM present/not_observed/uncertain 지표를 합치지 않음 |
+| 호출 경로·taint | 현재 정규화 schema에 완전한 호출/데이터 흐름 trace를 제공하는 계약은 확인하지 못함 | 호출 문맥은 별도 수집·provenance 표시가 필요 |
+| jadx MCP | 선택적 get_class_source 결과는 external_tool_calls로 기록하며 현재 pipeline은 review/risk에 넣지 않음 | C/C++ 분석·호출 문맥이 이미 연결됐다고 해석하지 않음 |
+| 첫 거름망의 실행 정책 | 현재 pipeline은 분석 뒤 review를 호출하며 경고가 있는 항목만 LLM에 보내는 조건문은 없음 | 사용자 목적과 현재 구현을 구분; 선별 규칙은 실험 설정으로 먼저 동결 |
+
+코드 근거: [분석기](https://github.com/Malicious-code-detection-project/project_Nurilab/blob/6abe1b2dc60167d0993d83782e97fcdec20a416c/project_nurilab/analyzers/python_static.py),
+[Ruff 수집](https://github.com/Malicious-code-detection-project/project_Nurilab/blob/6abe1b2dc60167d0993d83782e97fcdec20a416c/project_nurilab/analyzers/tools.py),
+[schema](https://github.com/Malicious-code-detection-project/project_Nurilab/blob/6abe1b2dc60167d0993d83782e97fcdec20a416c/project_nurilab/schemas.py),
+[LLM payload](https://github.com/Malicious-code-detection-project/project_Nurilab/blob/6abe1b2dc60167d0993d83782e97fcdec20a416c/project_nurilab/llm/review.py),
+[pipeline](https://github.com/Malicious-code-detection-project/project_Nurilab/blob/6abe1b2dc60167d0993d83782e97fcdec20a416c/project_nurilab/pipeline.py).
+Nurilab 저장소 코드는 수정하거나 실행하지 않았다.
+
+### 보류 32건의 선별 결과
+
+**우선 7건, 조건부 후속 11건, 선행 정비 필요 14건**으로 나눴다.
+이는 판단 가능성이 있는 후보의 우선순위이며 새 이진 라벨을 확정한 결과가 아니다.
+선정은 저장된 원천 대조와 필요한 문맥의 구체성에 근거했다. 모델 정답 여부를 선정 기준으로 사용하지 않았다.
+
+| 우선 후보 함수 | 요청 CWE | 추가할 근거 |
+| --- | --- | --- |
+| swabHorAcc32 | CWE-119 | horAcc32의 stride/cc 계약, TIFFSwabArrayOfLong의 길이 단위, assertion 활성 여부 및 실제 버퍼 크기 |
+| PredictorDecodeRow | CWE-119 | decodepfunc가 설정되는 지점, 실제 함수 후보, decoderow가 보장하는 길이, occ0·stride·할당 크기 |
+| PredictorEncodeRow | CWE-119 | encodepfunc 설정·호출 대상, encoderow와의 순서, cc·stride·할당 크기 |
+| rose_start_idletimer | CWE-416 | rose_idletimer_expiry, stop 경로, sock 참조 획득·해제, 타이머/해제의 가능한 순서 |
+| kg_unseal_iov_token | CWE-125 | kg_unseal_v1_iov 등 분기 대상, header->buffer.length와 bodysize 관계, 실제 읽기 위치 |
+| process_destblt | CWE-119 | process_orders의 남은 길이 검사, in_uint8/rdp_in_coord 매크로·함수, present/delta별 필요한 바이트 |
+| SampleTable::isValid | CWE-20 | time-to-sample setter, 초기값·중복 설정, 빈 배열과 미설정 상태를 사용하는 호출자 |
+
+우선 7건은 5개 원천 commit 묶음이다. libtiff 3건은 같은 파일·패치 계열이므로 독립 사례 3개로 일반화하지 않는다.
+첫 문맥 수집은 직접 callee가 같은 파일에 있는 swabHorAcc32부터 시작하고, 간접 호출·비동기 수명·객체 상태 순으로 확장한다.
+7건 중 도구 경고가 실제로 발생한다고 확인한 사례는 아직 없다. 문맥을 확보해도 판단이 어려우면 보류를 유지한다.
+
+| 조건부 후속 함수 | 요청 CWE | 진입 전 추가 확인 |
+| --- | --- | --- |
+| DefragTrackerInit | CWE-358 | fragment protocol 초기화, tracker 조회·비교 키, 공격 입력 도달 조건과 CWE-358 대응 |
+| SFS_ObjectMethodCall | CWE-476 | parser/codec 포인터 생성 계약과 재귀 깊이 실패 경로; stack exhaustion과 CWE-476 대응 |
+| SampleTable::setSyncSampleParams | CWE-20 | sample 번호의 0 허용 여부, 감산 이후 사용처, 입력 규격; 기존 패치가 이 경로의 정답을 입증하지 않음 |
+| _our_safe_pcap_next_ex | CWE-125 | 반환된 packet을 읽는 parser, len/caplen 사용 계약; wrapper의 검증 누락과 downstream CWE-125 범위 분리 |
+| gss_krb5int_export_lucid_sec_context | CWE-703 | context 해제·export 호출 순서, established/terminated 상태와 CWE-703 대응 |
+| handle_usb_rx | CWE-787 | tiny_dispatch/pb_parse의 목적지 크기와 메시지 타입, 길이 계약; 읽기 경계와 CWE-787 쓰기 경계 분리 |
+| krb5_gss_inquire_sec_context_by_oid | CWE-703 | gss_process_context_token 이후 context 수명·상태 계약과 요청 CWE-703의 적합성 |
+| newSWFInput_allocedBuffer | CWE-703 | newSWFInput_buffer의 실패 반환과 malloc 실패 도달 조건; NULL 결함과 CWE-703 또는 더 구체적인 CWE의 대응 |
+| njs_typed_array_set_value | CWE-703 | setval/njs_set_number의 값 소유권·쓰기 가능성, SEGV 경로와 CWE-703 대응 |
+| smb2_writev_callback | CWE-416 | queue_work의 실행/반환 순서, server 소유권·참조 유지 및 완료 callback; 연결된 SMB2_read 패치와 분리해 검증 |
+| snmp_helper | CWE-129 | datalen과 32비트 읽기/쓰기 조건은 이미 근거가 있으므로 문맥 추가보다 CWE-129 매핑 검토를 우선 |
+
+나머지 14건은 평가 대상 CWE 정비 10건, 원천 입력 불일치 2건(ne2000_buffer_full/do_connect),
+고정 원천 미확보 2건(init_seconds_var/stub_charset)이다. 근거만 추가해서 바로 비교하지 않는다.
+CWE·입력 복원·범위를 바꾸는 경우 새 버전과 새 모델 응답이 필요하다.
+전체 32개 ID와 기존 사유는 Git 제외 `context-experiment-plan.json`의 candidates에 보존한다.
+
+### 비교 조건과 질문 범위
+
+| 조건 | 모델에 제공하는 입력 | 역할 |
+| --- | --- | --- |
+| A: 코드 단독 | 기존 초점 함수 코드 + 고정된 목표 CWE·평가 범위 | 추가 근거 없이 어디까지 판단하는지 측정 |
+| B: 코드+근거 | A의 동일 코드 + 실제 도구 경고 + 관련 호출/데이터 흐름·주변 코드 | 사용자 요청의 주 비교 |
+| C: 문맥만 추가 | A의 코드 + B와 같은 주변 코드, 도구 경고는 제외 | 선택적 대조. A/B 차이가 도구 때문인지 추가 코드 때문인지 분리 |
+| N: Nurilab 현재 계약 | Python 대상의 실제 정규화 신호만 입력, 기존 review schema 유지 | 별도 제품 적합성 실험; C/C++ 32건에 현재 그대로 적용하지 않음 |
+
+A와 B의 주 비교는 **근거 추가 묶음의 효과**이며 도구 경고만의 인과 효과로 부르지 않는다.
+C를 실행하지 않으면 도구와 문맥 각각의 기여는 미분리로 보고한다.
+Nurilab N 조건은 언어와 출력 계약이 달라 A/B의 이진 F1과 직접 순위를 매기지 않는다.
+
+보류 사례의 목표는 고정 revision에서 해당 함수에 연결된 경로의 요청 CWE 존재 여부로 새로 정의한다.
+현재 supplied_function 평가보다 범위가 넓어지므로 기존 라벨을 복사하지 않는다.
+모델 출력 전에 조사자가 전체 근거로 **새 scope의 gold**를 확정하고 A/B에 같은 gold를 사용한다.
+지시문·목표 범위는 두 조건에서 같고 제공하는 근거만 다르게 한다.
+A에서 보이지 않는 문맥 때문에 uncertain이 적절한 경우는 별도 answerability 기록으로 남겨,
+정답 양성에 대한 탐지 recall과 제공 정보 내에서의 적절한 기권을 함께 보고한다.
+독립 검수가 없다면 수동·비독립 검수 한계를 그대로 명시한다.
+
+### 근거 수집과 누수 방지
+
+1. 원천 commit의 정확한 parent와 초점 함수 hash를 고정한다. Linux 등은 빌드 설정·매크로·include 및 함수 포인터/비동기 모델링의 확인 범위를 기록한다.
+2. C/C++ 지원 backend를 선정하고, 고정 입력에서 실제 도구 실행이 가능한지 확인한다. 현재 Nurilab에 C/C++ backend가 있다고 가정하거나 이번에 새 도구를 설치하지 않는다.
+3. 원 도구 JSON/SARIF 등 실제 형식·도구 버전·규칙 집합·명령·종료 상태를 보존한다. 빈 경고, 미지원, 빌드 실패, timeout을 구분한다. 경고 없음은 안전 증명이 아니다.
+4. 경고에는 evidence_id, tool/version/rule_id, file/line, message, 실제 제공된 trace를 연결한다. 도구가 제공하지 않는 source/sink·path를 만들어 넣지 않는다.
+5. 주변 코드에는 commit/file/line/hash와 수집 방식을 넣는다. 수동으로 수집한 문맥은 manual_source_context로 표시하며 tool_trace와 구분한다.
+6. 입력에는 gold, 기존 GPT 답변, CVE 설명, 수정 diff, fix commit 메시지, 검수자의 취약/안전 결론을 넣지 않는다. 패치 정보는 gold 검수 자료로만 보존한다. 실제 정적 경고의 가설은 도구 출력으로 표시해 전달한다.
+7. B에 넣는 문맥 선택·신호 정렬·제한 규칙을 모델 출력 전에 동결한다. 이미 패치를 보고 고른 32건은 후향적 개발 진단이므로 실제 운영 성능으로 일반화하지 않는다.
+8. 기존 라벨과 예측은 보존하며 새 packet과 gold는 별도 sidecar·run ID로 저장한다. 이 개발 사례를 후속 모델 학습 자료에 섞지 않는다.
+
+### 정적 분석을 첫 거름망으로 쓰는 성능 평가
+
+연구 흐름은 정적 분석 → 후보 선택 → LLM 근거 검토 → 사람의 최종 검토다.
+LLM이 원 분석기의 경고를 덮어쓰거나 삭제하지 않고, 별도 검토 판단·근거로 저장하도록 한다.
+분석기의 severity를 정답 CWE 라벨로 바꾸지 않으며 정상 코드를 의심하는 경고도 포함한다.
+
+| 평가 단계 | 기록할 내용 |
+| --- | --- |
+| 분석기 | 대상/성공/미지원/실패 수, 규칙별 경고 수, gold 대비 양성 선별률·미선별 양성 |
+| LLM에 넘어간 집합 | A/B의 같은 ID에서 TP/FN/FP/TN, uncertain/invalid, P/R/F1·이진 응답률·판정 전환, 올바른 기권, 근거에 없는 주장 |
+| 경고 검토 효용 | 잘못된 경고를 올바르게 기각한 수와 실제 결함을 잘못 기각한 수, 확인할 사람이 줄어든 경고량 |
+| 전체 흐름 | 첫 거름망에서 빠진 양성도 포함한 recall·미탐; 분석 실패는 별도 coverage와 실패 수로 공개 |
+| 비용 | 분석 시간, 문맥 수집 시간, 입력 token 수·절단 기록, LLM 지연·생성 속도, GPU별 allocated/reserved/peak |
+
+경고가 있는 사례만으로 계산한 LLM 성능을 전체 입력에 대한 성능이라고 쓰지 않는다.
+32건은 모호한 사례를 골라놓은 집합이라 실제 경고 비율·전체 성능의 대표 표본이 아니다.
+본 평가에는 같은 규칙으로 얻은 양성·비취약 경고·무경고 표본을 별도 고정하고, 동일 project/commit 계열의 분할 누수를 막는다.
+이진 gold를 확정하지 못한 사례는 해결률·기권 분석에는 남기되 확정 F1 집계에서 제외한다.
+
+### 제안하는 예비 실험과 실행 전 조건
+
+우선 Qwen3-Coder-Next base에서 최대 7건 × A/B = 14회, 이후 해당 adapter 준비·검증 후 같은 14회로
+총 28회를 후보로 둔다. GPT-OSS-20B 기존 기록은 보존하며 이번 계획으로 다시 실행하지 않는다.
+한 모델을 GPU0·1에 나누어 올리고 base → adapter 순서를 유지한다. 초기에는 dynamic cache로 통제하고
+정적 cache 및 다른 모델 확장은 이후 공통 실험 조건으로 연결한다. Llama 405B는 계속 양자화 대기다.
+
+예비 상한 후보: 입력 8,192 tokens, 생성 2,048 tokens/호출, seed 3407을 paired 조건마다 재설정,
+최대 생성 57,344 tokens(28회), variant별 wall limit 2시간이다. 공통 system/schema/native template와
+sampling 설정을 동결하고 필수 경로가 입력 상한을 넘으면 조용히 자르지 않고 해당 pair의 보류 사유를 남긴다.
+이 수치는 계획이며 실행 허가나 가중치 적재 가능성 검증을 의미하지 않는다. C/N 조건은 이 예산에 포함하지 않으며 별도 설계 후 실행한다.
+
+실행 전 필요한 것은 C/C++ backend·실제 raw 경고, 고정 문맥 packet, 새 scope의 gold와 누수 검사,
+Qwen의 두 GPU 적재·형식 검사다. adapter 비교는 학습 데이터/target 동결·1-step·저장/재적재 검사도 필요하다.
+OOM, 잘못된 장치 배치, 입력 hash 변경, 도구/모델 오류, 시간 상한이면 중단하고 실패를 보존한다.
+**현재 상태는 후보 선별·설계 완료이며, 7건 모두 실행 준비 완료나 이진 판정 완료로 표시하지 않는다.**
+
+근거·후보·미실행 조건은 `.private/b200-context-experiment-20261014/`의
+`context-experiment-plan.json`, `nurilab-source-inventory.json`, `selection-validation.json`에 저장했다.
+
+---
+
+
+2026-10-14 현재 결과와 후속 비교: [B200 실험 보고서](B200_EXPERIMENT_TABLES.md).
+학습 실행 완료와 부족한 탐지 성능을 구분하고, 형식·라벨·미탐/오탐 분석 및
+GPT-OSS-20B 포함 5개 모델의 공통 비교표·실험 환경·다음 개선 순서를 그 문서에서 관리한다.
+2026-10-13의 3개 모델 준비는 유지하며 Llama 405B는 양자화 대기다.
+이번 갱신은 문서 작업으로 새 GPU 실험이나 자동 학습 예약을 시작하지 않았다.
+
+
 2026-10-07 환경별 조회용 표: [A6000 실험표](A6000_EXPERIMENT_TABLES.md),
 [B200 두 GPU 실험표](B200_EXPERIMENT_TABLES.md).
 이 문서의 기존 A6000 상세 이력은 보존하고, B200 실행 구성·수치는 별도 표에서 읽는다.
@@ -4255,3 +4451,62 @@ experiments/unsloth-official-tutorial-generation-64-20261004-v1/.venv/bin/python
 전체batch4·동결 데이터·LoRA 대상은 유지했고 Python패치·DDP·accumulation·checkpointing의 차이를 명시했다.
 생성은 base0/600·adapter0/600으로 준비만 완료했다. 이 문서 갱신에서 추가 GPU 작업은 실행하지 않았다.
 새 표를 README·문서 인덱스·AGENTS의 지도에 연결했으며 원 artifacts·실패·기존 결과를 변경하지 않았다.
+
+
+### 2026-10-13: 후속 3개 모델의 B200 준비
+
+사용자 요청에 따라 Qwen3-Coder-Next, Mistral Small 4, GPT-OSS-120B의
+파인튜닝 및 base/adapter 비교를 준비했다. Llama 405B는 양자화 방식 결정 전까지
+대기하며 다운로드·양자화·학습을 시작하지 않았다. 이번 작업은 다운로드와 CPU
+검증까지이며 GPU 적재·생성·역전파·학습은 실행하지 않았다.
+
+| 공식 모델 | 고정 revision | 선택한 HF 가중치 용량(십진) | shard 수 |
+| --- | --- | ---: | ---: |
+| Qwen/Qwen3-Coder-Next | `a7fbcb5c0e12d62a448eaa0e260346bf5dcc0feb` | 159.36 GB | 40 |
+| mistralai/Mistral-Small-4-119B-2603 | `a11f36bebf709121056b1dbcc943d1c6afbe494d` | 120.92 GB | 3 |
+| openai/gpt-oss-120b | `b5c939de8f754692c1647ca79fbf85e8c1e70f8a` | 65.25 GB | 15 |
+
+기존 Qwen·Mistral 가중치를 재사용하고 GPT-OSS-120B 가중치를 내려받았다.
+58개 shard의 SHA-256을 공식 LFS 메타데이터와 대조했으며 safetensors 헤더와
+index도 확인했다. Qwen의 기존 로컬 채팅 템플릿이 고정 revision과 달라 원본을
+보존하고, 세 모델 모두 공식 메타데이터와 검증된 가중치 링크를 가진 별도 실행
+폴더를 준비했다. Mistral의 기존 BF16 파생본은 35개 shard의 구조·index·변환
+계보를 확인했으나 FP8→BF16 수치 변환 자체는 재현하지 않았다.
+
+기존 Transformers 5.9.0 환경에서 config·tokenizer·모델 클래스 및 meta-device
+구조 검사를 통과했다. 모델별 합성 입력 3건, 총 9건에서 native generation prefix와
+학습 completion 경계, prompt loss mask, 정답 종료 토큰을 확인했다.
+Qwen의 fast linear-attention kernel은 없어 torch fallback 경고가 발생했다.
+CPU 검사는 실제 가중치 적재나 학습 가능성·속도 검증을 대신하지 않는다.
+
+실험표는 모델 3개 × base/adapter × dynamic/static의 12개 조건이다.
+모든 미실행 지표는 null로 두며 static cache는 모델별 지원 확인 후에만 실행한다.
+각 모델을 GPU0·1에 나누어 적재하고 한 번에 한 모델만 실행한다. 비교 순서는
+base → adapter를 유지한다. 학습 분산 방식은 전체 모델을 rank마다 복제하는
+DDP가 아닌 FSDP2 후보이며, 추론의 device_map을 분산 학습 설정으로 재사용하지 않는다.
+
+학습 후보는 LoRA r=16, alpha=32, dropout=0, sequence length=2048,
+rank별 microbatch=1, accumulation=2, 두 rank일 때 effective batch=4,
+learning rate=1e-4, seed=20261013, 1→10→100-step 단계 검증이다.
+이는 실행 확정값이 아니다. 학습 데이터 manifest와 target block/module을 먼저
+동결하고 기존 선택적 block 연구와의 관계를 결정한다. 모델별 native template을
+사용하되 동일한 의미의 지시문·입력 ID와 base/adapter 간 동일 정밀도를 통제한다.
+
+원천 패치 검수 100건 중 이진 판정이 가능한 68건과 보류 32건은 개발 진단용이다.
+이 자료를 학습 데이터나 한 번도 보지 않은 최종 평가 데이터로 취급하지 않는다.
+표에는 TP/FN/FP/TN, uncertain/invalid, precision/recall/F1, binary coverage,
+FPR, 일반 능력 유지 지표와 GPU별 allocated/reserved/peak 메모리,
+생성 token 수·시간·tokens/s를 남긴다. 장문 수용량 시험은 공통 성능 평가와 분리한다.
+W&B는 실제 연결 확인 후 사용하며 이번 작업에서는 새 run을 시작하지 않았다.
+
+다음 실행 전에는 데이터 누수 검사, 두 GPU 실제 적재, 1-step의 gradient·동결
+파라미터 검사, adapter 저장·재로딩 일치를 검증한다. OOM·비유한 loss/gradient·
+동결 가중치 변경·prefix/mask 불일치·한 GPU 적재·계획 밖 CPU/disk offload가
+발생하면 중단한다. GPU 메모리 적합성과 학습 runner는 아직 미검증이다.
+
+장비별 경로·실행 진입점·해시와 빈 실험표는 Git 제외
+`.private/b200-model-preparation-20261013/`의 `experiment-plan.json`,
+`experiment-table.html`, `readiness-manifest.json`, `preparation-status.json`,
+`training-format-check.json`에 보존했다. `run-prepared.sh plan <model>`은
+실행 계획 조회이고 `gpu-smoke <model>`은 별도 GPU 실행이다. 후자는 이번 준비에서
+실행하지 않았다. 기존 평가 원본·라벨·adapter 및 20B 환경은 보존했다.
